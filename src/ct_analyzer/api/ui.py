@@ -14,13 +14,13 @@ UI_DIR = Path(__file__).resolve().parent.parent / "ui"
 def build_ui_router(settings: Settings) -> APIRouter:
     router = APIRouter(include_in_schema=False)
 
-    @router.get("/")
+    @router.get("/", response_model=None)
     async def index(request: Request) -> FileResponse | RedirectResponse:
         if settings.auth.enabled and not is_ui_session_authenticated(request, settings):
             return RedirectResponse(url="/login", status_code=303)
         return FileResponse(UI_DIR / "index.html")
 
-    @router.get("/login")
+    @router.get("/login", response_model=None)
     async def login_page(request: Request) -> FileResponse | RedirectResponse:
         if is_ui_session_authenticated(request, settings):
             return RedirectResponse(url="/", status_code=303)
