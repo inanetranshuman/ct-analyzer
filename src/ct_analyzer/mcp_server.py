@@ -45,6 +45,15 @@ def _issuer_profile_payload(repository: ClickHouseRepository, days: int) -> dict
     return repository.query_issuer_profile(days)
 
 
+def _issuer_breakdown_payload(
+    repository: ClickHouseRepository,
+    group_by: str,
+    days: int,
+    limit: int,
+) -> dict[str, Any]:
+    return repository.query_issuer_breakdown(group_by, days, limit)
+
+
 def _certificate_details_payload(repository: ClickHouseRepository, cert_hash: str) -> dict[str, Any] | None:
     return repository.get_certificate_details(cert_hash)
 
@@ -139,6 +148,12 @@ def create_mcp_server(
         return await asyncio.to_thread(_issuer_profile_payload, repository, days)
 
     @mcp.tool()
+    async def get_issuer_breakdown(group_by: str = "sig_alg", days: int = 30, limit: int = 10) -> dict[str, Any]:
+        """Return grouped GoDaddy/Starfield counts by a bounded set of useful dimensions."""
+        repository = get_repository()
+        return await asyncio.to_thread(_issuer_breakdown_payload, repository, group_by, days, limit)
+
+    @mcp.tool()
     async def get_certificate(cert_hash: str) -> dict[str, Any]:
         """Return a single certificate record plus findings by certificate hash."""
         repository = get_repository()
@@ -208,6 +223,13 @@ def create_mcp_server(
         """Read-only JSON snapshot of the GoDaddy/Starfield issuer baseline profile."""
         repository = get_repository()
         payload = await asyncio.to_thread(_issuer_profile_payload, repository, days)
+        return json.dumps(payload, indent=2, sort_keys=True)
+
+    @mcp.resource("ct://issuer/godaddy/breakdown/{group_by}/{days}/{limit}")
+    async def issuer_breakdown_resource(group_by: str, days: int, limit: int) -> str:
+        """Read-only JSON snapshot of a bounded grouped issuer breakdown."""
+        repository = get_repository()
+        payload = await asyncio.to_thread(_issuer_breakdown_payload, repository, group_by, days, limit)
         return json.dumps(payload, indent=2, sort_keys=True)
 
     @mcp.resource("ct://certificate/{cert_hash}")

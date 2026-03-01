@@ -328,6 +328,72 @@ class ClickHouseRepository:
             "top_eku_sets": top_eku_sets,
         }
 
+    def query_issuer_breakdown(self, group_by: str, days: int, limit: int) -> dict[str, Any]:
+        cutoff = datetime.now(tz=UTC) - timedelta(days=days)
+        groupings = {
+            "sig_alg": ("c.sig_alg", "signature_algorithm"),
+            "key_type": ("c.key_type", "key_type"),
+            "key_size": ("toString(c.key_size)", "key_size"),
+            "eku_set": ("if(length(c.eku) = 0, '(none)', arrayStringConcat(arraySort(c.eku), ','))", "eku_set"),
+            "finding_code": ("f.finding_code", "finding_code"),
+            "severity": ("f.severity", "severity"),
+            "anomaly_bucket": (
+                "multiIf(c.anomaly_score >= 60, '60+', c.anomaly_score >= 30, '30-59', c.anomaly_score >= 10, '10-29', '0-9')",
+                "anomaly_bucket",
+            ),
+            "registered_domain": ("o.registered_domain", "registered_domain"),
+            "validity_bucket": (
+                "multiIf(c.validity_days <= 90, '0-90', c.validity_days <= 180, '91-180', c.validity_days <= 397, '181-397', '398+')",
+                "validity_bucket",
+            ),
+            "san_count_bucket": (
+                "multiIf(c.san_count = 1, '1', c.san_count <= 5, '2-5', c.san_count <= 25, '6-25', '26+')",
+                "san_count_bucket",
+            ),
+        }
+        if group_by not in groupings:
+            raise ValueError(f"Unsupported group_by value: {group_by}")
+
+        expr, label = groupings[group_by]
+        join_findings = "LEFT JOIN {findings} AS f ON f.cert_hash = c.cert_hash".format(
+            findings=self._qualified("cert_findings")
+        )
+        if group_by not in {"finding_code", "severity"}:
+            join_findings = ""
+            where_clause = "o.seen_at >= %(cutoff)s"
+        else:
+            where_clause = "o.seen_at >= %(cutoff)s AND f.created_at >= %(cutoff)s"
+
+        rows = self.client.query(
+            f"""
+            SELECT
+                {expr} AS grouping_value,
+                count() AS count
+            FROM {self._qualified("observations")} AS o
+            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                ON c.cert_hash = o.cert_hash
+            {join_findings}
+            WHERE {where_clause}
+            GROUP BY grouping_value
+            ORDER BY count DESC
+            LIMIT %(limit)s
+            """,
+            parameters={"cutoff": cutoff, "limit": limit},
+        ).result_rows
+        return {
+            "issuer": "godaddy",
+            "days": days,
+            "group_by": group_by,
+            "label": label,
+            "buckets": [
+                {
+                    "value": value,
+                    "count": int(count),
+                }
+                for value, count in rows
+            ],
+        }
+
     def query_anomalies(self, days: int, limit: int) -> list[dict[str, Any]]:
         cutoff = datetime.now(tz=UTC) - timedelta(days=days)
         cert_rows = self.client.query(

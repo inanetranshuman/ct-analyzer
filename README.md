@@ -81,6 +81,7 @@ docker compose up -d rollup
 - `GET /health`
 - `GET /stats/issuer/godaddy?days=30`
 - `GET /profile/issuer/godaddy?days=30`
+- `GET /breakdown/issuer/godaddy?group_by=sig_alg&days=30&limit=10`
 - `GET /anomalies/issuer/godaddy?days=7&limit=50`
 - `GET /certificates/{cert_hash}`
 - `GET /certificates/search?...`
@@ -92,6 +93,7 @@ Available MCP tools:
 
 - `get_issuer_stats(days=30)`
 - `get_issuer_profile(days=30)`
+- `get_issuer_breakdown(group_by="sig_alg", days=30, limit=10)`
 - `get_anomalies(days=7, limit=50)`
 - `get_certificate(cert_hash)`
 - `search_recent_certificates(...)`
@@ -103,6 +105,7 @@ Available MCP resources:
 
 - `ct://issuer/godaddy/stats/{days}`
 - `ct://issuer/godaddy/profile/{days}`
+- `ct://issuer/godaddy/breakdown/{group_by}/{days}/{limit}`
 - `ct://issuer/godaddy/anomalies/{days}/{limit}`
 - `ct://certificate/{cert_hash}`
 - `ct://domain/{registered_domain}/activity/{days}/{limit}`
@@ -136,6 +139,7 @@ Additional investigation endpoints expose bounded raw detail for drill-down and 
 - recent certificate search with bounded filters and limits
 - recent activity for one registered domain
 - issuer profile/baseline summaries for common GoDaddy certificate attributes
+- grouped issuer breakdowns by signature algorithm, key type, EKU set, finding code, anomaly bucket, domain, and other bounded dimensions
 
 ## Configuration
 

@@ -35,6 +35,14 @@ class IssuerProfileResponse(BaseModel):
     top_eku_sets: list[dict[str, Any]]
 
 
+class IssuerBreakdownResponse(BaseModel):
+    issuer: str
+    days: int
+    group_by: str
+    label: str
+    buckets: list[dict[str, Any]]
+
+
 class AnomalyRecordResponse(BaseModel):
     cert_hash: str
     subject_cn: str
@@ -111,6 +119,20 @@ def build_router(
     ) -> IssuerProfileResponse:
         profile = await asyncio.to_thread(repository.query_issuer_profile, days)
         return IssuerProfileResponse(**profile)
+
+    @router.get("/breakdown/issuer/godaddy", response_model=IssuerBreakdownResponse)
+    async def issuer_breakdown(
+        group_by: str = Query(
+            default="sig_alg",
+            pattern="^(sig_alg|key_type|key_size|eku_set|finding_code|severity|anomaly_bucket|registered_domain|validity_bucket|san_count_bucket)$",
+        ),
+        days: int = Query(default=30, ge=1, le=365),
+        limit: int = Query(default=10, ge=1, le=100),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> IssuerBreakdownResponse:
+        payload = await asyncio.to_thread(repository.query_issuer_breakdown, group_by, days, limit)
+        return IssuerBreakdownResponse(**payload)
 
     @router.get("/anomalies/issuer/godaddy", response_model=IssuerAnomaliesResponse)
     async def issuer_anomalies(
