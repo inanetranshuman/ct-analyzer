@@ -7,32 +7,52 @@
     <link rel="stylesheet" href="/ui/styles.css">
   </head>
   <body>
-    <div class="page-shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">Certificate Transparency Reporting</p>
-          <h1>GoDaddy and Starfield Certificate Intelligence.</h1>
-          <p class="hero-copy">
-            Inspect issuer baselines, grouped issuance patterns, and suspicious certificates without dropping into raw JSON.
-          </p>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="brand-overline">ct-analyzer</p>
+          <h1>Certificate Intelligence</h1>
+          <p class="brand-copy">GoDaddy and Starfield issuance monitoring, issuer baselines, and anomaly review.</p>
         </div>
-        <section class="auth-panel">
-          <label>Session</label>
-          <div class="auth-row auth-row-single">
-            <button id="logout-button" type="button">Logout</button>
-          </div>
-          <p id="auth-status" class="auth-status">Checking session state.</p>
-        </section>
-      </header>
 
-      <main class="dashboard-grid">
-        <section class="panel panel-metrics">
-          <div class="panel-header">
+        <nav class="sidebar-nav" aria-label="Dashboard sections">
+          <a class="nav-pill" href="#overview">Overview</a>
+          <a class="nav-pill" href="#profile">Issuer Profile</a>
+          <a class="nav-pill" href="#breakdowns">Breakdowns</a>
+          <a class="nav-pill" href="#anomalies">Suspicious Certificates</a>
+        </nav>
+
+        <section class="sidebar-card">
+          <p class="eyebrow">Data Scope</p>
+          <div class="scope-grid">
             <div>
-              <p class="section-kicker">Overview</p>
-              <h2>30-day issuance snapshot</h2>
+              <span>Issuer Family</span>
+              <strong>GoDaddy / Starfield</strong>
             </div>
-            <label class="days-control">
+            <div>
+              <span>Source</span>
+              <strong>CT Stream + ClickHouse</strong>
+            </div>
+            <div>
+              <span>View</span>
+              <strong>Read-only analyst UI</strong>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Certificate Transparency Reporting</p>
+            <h2>GoDaddy and Starfield Certificate Intelligence</h2>
+            <p class="hero-copy">
+              Inspect issuer baselines, grouped issuance patterns, and suspicious certificates without dropping into raw JSON.
+            </p>
+          </div>
+
+          <section class="topbar-actions">
+            <label class="control-block">
               Window
               <select id="window-days">
                 <option value="7">7 days</option>
@@ -41,79 +61,113 @@
                 <option value="365">365 days</option>
               </select>
             </label>
+
+            <section class="session-card">
+              <p class="session-label">Session</p>
+              <button id="logout-button" type="button">Logout</button>
+              <p id="auth-status" class="auth-status">Checking session state.</p>
+            </section>
+          </section>
+        </header>
+
+        <section id="overview" class="board-row">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Overview</p>
+              <h3>Issuance Snapshot</h3>
+            </div>
           </div>
           <div id="metric-cards" class="metric-cards"></div>
         </section>
 
-        <section class="panel panel-profile">
-          <div class="panel-header">
-            <div>
-              <p class="section-kicker">Issuer Profile</p>
-              <h2>Standard X.509 pattern</h2>
+        <section id="profile" class="board-row two-column">
+          <article class="panel panel-profile">
+            <div class="panel-header">
+              <div>
+                <p class="section-kicker">Issuer Profile</p>
+                <h3>Standard X.509 Pattern</h3>
+              </div>
             </div>
-          </div>
-          <div class="profile-grid">
-            <div class="stat-block">
-              <h3>Validity Days</h3>
-              <div id="validity-stats" class="mini-stats"></div>
+
+            <div class="profile-grid">
+              <div class="stat-block">
+                <h4>Validity Days</h4>
+                <div id="validity-stats" class="mini-stats"></div>
+              </div>
+              <div class="stat-block">
+                <h4>SAN Count</h4>
+                <div id="san-stats" class="mini-stats"></div>
+              </div>
+              <div class="stat-block stat-block-wide">
+                <h4>Feature Rates</h4>
+                <div id="feature-rates" class="list-block"></div>
+              </div>
             </div>
-            <div class="stat-block">
-              <h3>SAN Count</h3>
-              <div id="san-stats" class="mini-stats"></div>
+          </article>
+
+          <article class="panel panel-profile">
+            <div class="panel-header">
+              <div>
+                <p class="section-kicker">Top Attributes</p>
+                <h3>Dominant Patterns</h3>
+              </div>
             </div>
-            <div class="stat-block">
-              <h3>Feature Rates</h3>
-              <div id="feature-rates" class="list-block"></div>
+
+            <div class="attribute-grid">
+              <div class="stat-block">
+                <h4>Signature Algorithms</h4>
+                <div id="sig-alg-list" class="rank-list"></div>
+              </div>
+              <div class="stat-block">
+                <h4>Key Types</h4>
+                <div id="key-type-list" class="rank-list"></div>
+              </div>
+              <div class="stat-block stat-block-wide">
+                <h4>EKU Sets</h4>
+                <div id="eku-list" class="rank-list"></div>
+              </div>
             </div>
-            <div class="stat-block">
-              <h3>Top Signature Algorithms</h3>
-              <div id="sig-alg-list" class="rank-list"></div>
-            </div>
-            <div class="stat-block">
-              <h3>Top Key Types</h3>
-              <div id="key-type-list" class="rank-list"></div>
-            </div>
-            <div class="stat-block">
-              <h3>Top EKU Sets</h3>
-              <div id="eku-list" class="rank-list"></div>
-            </div>
-          </div>
+          </article>
         </section>
 
-        <section class="panel panel-breakdown">
-          <div class="panel-header">
-            <div>
-              <p class="section-kicker">Grouped Reporting</p>
-              <h2>Issuer breakdown explorer</h2>
+        <section id="breakdowns" class="board-row">
+          <article class="panel panel-breakdown">
+            <div class="panel-header">
+              <div>
+                <p class="section-kicker">Grouped Reporting</p>
+                <h3>Issuer Breakdown Explorer</h3>
+              </div>
+              <label class="control-block compact">
+                Group By
+                <select id="group-by">
+                  <option value="issuer_cn">Issuer CN</option>
+                  <option value="sig_alg">Signature Algorithm</option>
+                  <option value="key_type">Key Type</option>
+                  <option value="key_size">Key Size</option>
+                  <option value="eku_set">EKU Set</option>
+                  <option value="finding_code">Finding Code</option>
+                  <option value="severity">Finding Severity</option>
+                  <option value="anomaly_bucket">Anomaly Bucket</option>
+                  <option value="registered_domain">Registered Domain</option>
+                  <option value="validity_bucket">Validity Bucket</option>
+                  <option value="san_count_bucket">SAN Count Bucket</option>
+                </select>
+              </label>
             </div>
-            <label class="days-control">
-              Group By
-              <select id="group-by">
-                <option value="issuer_cn">Issuer CN</option>
-                <option value="sig_alg">Signature Algorithm</option>
-                <option value="key_type">Key Type</option>
-                <option value="key_size">Key Size</option>
-                <option value="eku_set">EKU Set</option>
-                <option value="finding_code">Finding Code</option>
-                <option value="severity">Finding Severity</option>
-                <option value="anomaly_bucket">Anomaly Bucket</option>
-                <option value="registered_domain">Registered Domain</option>
-                <option value="validity_bucket">Validity Bucket</option>
-                <option value="san_count_bucket">SAN Count Bucket</option>
-              </select>
-            </label>
-          </div>
-          <div id="breakdown-table" class="table-shell"></div>
+            <div id="breakdown-table" class="table-shell"></div>
+          </article>
         </section>
 
-        <section class="panel panel-anomalies">
-          <div class="panel-header">
-            <div>
-              <p class="section-kicker">Anomalies</p>
-              <h2>Recent suspicious certificates</h2>
+        <section id="anomalies" class="board-row">
+          <article class="panel panel-anomalies">
+            <div class="panel-header">
+              <div>
+                <p class="section-kicker">Anomalies</p>
+                <h3>Suspicious Certificates</h3>
+              </div>
             </div>
-          </div>
-          <div id="anomaly-list" class="anomaly-list"></div>
+            <div id="anomaly-list" class="anomaly-list"></div>
+          </article>
         </section>
       </main>
     </div>
