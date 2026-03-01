@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from ct_analyzer.config import Settings
 from ct_analyzer.db.clickhouse import ClickHouseRepository
-from ct_analyzer.security import require_api_key
+from ct_analyzer.security import require_api_key_or_session
 
 
 class HealthResponse(BaseModel):
@@ -92,7 +92,7 @@ def build_router(
     router = APIRouter()
 
     async def auth_dependency(request: Request) -> None:
-        await require_api_key(request, settings)
+        await require_api_key_or_session(request, settings)
 
     @router.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:

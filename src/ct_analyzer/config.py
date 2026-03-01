@@ -41,6 +41,14 @@ class ApiSettings(BaseModel):
     port: int = 8000
 
 
+class SessionSettings(BaseModel):
+    admin_username: str = "admin"
+    admin_password: str = ""
+    secret_key: str = "change-me"
+    cookie_name: str = "ct_analyzer_session"
+    https_only: bool = False
+
+
 class MCPSettings(BaseModel):
     allowed_hosts: list[str] = Field(
         default_factory=lambda: ["127.0.0.1:*", "localhost:*", "[::1]:*"]
@@ -95,6 +103,7 @@ class Settings(BaseModel):
     clickhouse: ClickHouseSettings = Field(default_factory=ClickHouseSettings)
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
+    session: SessionSettings = Field(default_factory=SessionSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     matching: IssuerMatchingSettings = Field(default_factory=IssuerMatchingSettings)
@@ -126,6 +135,14 @@ class Settings(BaseModel):
             api=ApiSettings(
                 host=os.getenv("API_HOST", "0.0.0.0"),
                 port=_env_int("API_PORT", 8000),
+            ),
+            session=SessionSettings(
+                admin_username=os.getenv("UI_ADMIN_USERNAME", "admin"),
+                admin_password=os.getenv("UI_ADMIN_PASSWORD", ""),
+                secret_key=os.getenv("SESSION_SECRET_KEY", "change-me"),
+                cookie_name=os.getenv("SESSION_COOKIE_NAME", "ct_analyzer_session"),
+                https_only=os.getenv("SESSION_HTTPS_ONLY", "false").lower()
+                in {"1", "true", "yes", "on"},
             ),
             mcp=MCPSettings(
                 allowed_hosts=_split_csv(

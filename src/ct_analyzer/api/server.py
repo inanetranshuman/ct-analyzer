@@ -6,12 +6,14 @@ import logging
 
 import uvicorn
 from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
 
 from ct_analyzer.api.routes import build_router
+from ct_analyzer.api.ui import build_ui_router
 from ct_analyzer.config import Settings, get_settings
 from ct_analyzer.db.clickhouse import ClickHouseRepository
 from ct_analyzer.mcp_server import create_mcp_server, mcp_dependency_error
-from ct_analyzer.security import APIKeyASGIMiddleware
+from ct_analyzer.security import APIKeyASGIMiddleware, SessionCookieSecurityMiddleware
 
 
 LOGGER = logging.getLogger(__name__)
@@ -43,6 +45,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
 
     app = FastAPI(title="ct-analyzer", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=effective_settings.session.secret_key,
+        session_cookie=effective_settings.session.cookie_name,
+        same_site="lax",
+        https_only=effective_settings.session.https_only,
+    )
+    app.add_middleware(SessionCookieSecurityMiddleware, settings=effective_settings)
+    app.include_router(build_ui_router(effective_settings))
     app.include_router(build_router(lambda: _repository(), effective_settings))
     if mcp_server is not None:
         app.mount("/mcp", APIKeyASGIMiddleware(mcp_server.streamable_http_app(), effective_settings))

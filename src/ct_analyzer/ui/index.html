@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ct-analyzer</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Certificate Transparency Reporting</p>
+          <h1>GoDaddy and Starfield issuance, profile, and anomaly reporting.</h1>
+          <p class="hero-copy">
+            A thin analyst-facing layer over the ct-analyzer API. Use it to inspect issuer baselines,
+            grouped breakdowns, and suspicious certificates without dropping into raw JSON.
+          </p>
+        </div>
+        <section class="auth-panel">
+          <label>Session</label>
+          <div class="auth-row auth-row-single">
+            <button id="logout-button" type="button">Logout</button>
+          </div>
+          <p id="auth-status" class="auth-status">Checking session state.</p>
+        </section>
+      </header>
+
+      <main class="dashboard-grid">
+        <section class="panel panel-metrics">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Overview</p>
+              <h2>30-day issuance snapshot</h2>
+            </div>
+            <label class="days-control">
+              Window
+              <select id="window-days">
+                <option value="7">7 days</option>
+                <option value="30" selected>30 days</option>
+                <option value="90">90 days</option>
+                <option value="365">365 days</option>
+              </select>
+            </label>
+          </div>
+          <div id="metric-cards" class="metric-cards"></div>
+        </section>
+
+        <section class="panel panel-profile">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Issuer Profile</p>
+              <h2>Standard X.509 pattern</h2>
+            </div>
+          </div>
+          <div class="profile-grid">
+            <div class="stat-block">
+              <h3>Validity Days</h3>
+              <div id="validity-stats" class="mini-stats"></div>
+            </div>
+            <div class="stat-block">
+              <h3>SAN Count</h3>
+              <div id="san-stats" class="mini-stats"></div>
+            </div>
+            <div class="stat-block">
+              <h3>Feature Rates</h3>
+              <div id="feature-rates" class="list-block"></div>
+            </div>
+            <div class="stat-block">
+              <h3>Top Signature Algorithms</h3>
+              <div id="sig-alg-list" class="rank-list"></div>
+            </div>
+            <div class="stat-block">
+              <h3>Top Key Types</h3>
+              <div id="key-type-list" class="rank-list"></div>
+            </div>
+            <div class="stat-block">
+              <h3>Top EKU Sets</h3>
+              <div id="eku-list" class="rank-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel-breakdown">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Grouped Reporting</p>
+              <h2>Issuer breakdown explorer</h2>
+            </div>
+            <label class="days-control">
+              Group By
+              <select id="group-by">
+                <option value="issuer_cn">Issuer CN</option>
+                <option value="sig_alg">Signature Algorithm</option>
+                <option value="key_type">Key Type</option>
+                <option value="key_size">Key Size</option>
+                <option value="eku_set">EKU Set</option>
+                <option value="finding_code">Finding Code</option>
+                <option value="severity">Finding Severity</option>
+                <option value="anomaly_bucket">Anomaly Bucket</option>
+                <option value="registered_domain">Registered Domain</option>
+                <option value="validity_bucket">Validity Bucket</option>
+                <option value="san_count_bucket">SAN Count Bucket</option>
+              </select>
+            </label>
+          </div>
+          <div id="breakdown-table" class="table-shell"></div>
+        </section>
+
+        <section class="panel panel-anomalies">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Anomalies</p>
+              <h2>Recent suspicious certificates</h2>
+            </div>
+          </div>
+          <div id="anomaly-list" class="anomaly-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="metric-card-template">
+      <article class="metric-card">
+        <p class="metric-label"></p>
+        <p class="metric-value"></p>
+      </article>
+    </template>
+
+    <script type="module" src="/ui/app.js"></script>
+  </body>
+</html>

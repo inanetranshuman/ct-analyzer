@@ -36,7 +36,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-ct_analyzer = ["db/schema.sql"]
+ct_analyzer = ["db/schema.sql", "ui/index.html", "ui/login.html", "ui/app.js", "ui/styles.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -9,6 +9,7 @@
 - Deduplicated `certificates` storage with append-only `observations` and `cert_findings`
 - Rule-based X.509 lint checks and explainable anomaly scoring with issuer baselines
 - FastAPI endpoints for issuer summary stats and top anomalies
+- Built-in reporting UI for issuer snapshots, grouped breakdowns, and anomaly review
 - MCP-compatible tools/resources server for natural-language CT queries from MCP clients
 - Docker Compose for ClickHouse and the app container
 
@@ -56,6 +57,12 @@ python -m ct_analyzer ingest
 python -m ct_analyzer api
 ```
 
+8. Open the reporting UI:
+
+```text
+http://localhost:8000/
+```
+
 ## CLI
 
 ```bash
@@ -88,6 +95,8 @@ docker compose up -d rollup
 - `GET /domains/{registered_domain}/activity?days=7&limit=25`
 
 The same `python -m ct_analyzer api` process also mounts a Streamable HTTP MCP endpoint at `http://localhost:8000/mcp`.
+
+The same process now also serves a browser UI at `GET /`. The UI is read-only and can use a browser session login for human access, while REST and MCP clients continue using bearer API keys.
 
 Available MCP tools:
 
@@ -193,6 +202,16 @@ When auth is enabled, send either:
 
 - `Authorization: Bearer <key>`
 - `X-API-Key: <key>`
+
+For UI session login, configure a single admin user and session secret:
+
+```env
+UI_ADMIN_USERNAME=admin
+UI_ADMIN_PASSWORD=replace-with-a-strong-password
+SESSION_SECRET_KEY=replace-with-a-long-random-secret
+SESSION_COOKIE_NAME=ct_analyzer_session
+SESSION_HTTPS_ONLY=true
+```
 
 Issuer matching behavior:
 
