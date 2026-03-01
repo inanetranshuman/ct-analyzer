@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -20,7 +21,8 @@ class ClickHouseRepository:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.database = settings.clickhouse.database
-        self.client = clickhouse_connect.get_client(
+        self._local = threading.local()
+        self._base_client = clickhouse_connect.get_client(
             host=settings.clickhouse.host,
             port=settings.clickhouse.port,
             username=settings.clickhouse.user,
@@ -31,6 +33,23 @@ class ClickHouseRepository:
     def _qualified(self, table: str) -> str:
         return f"{self.database}.{table}"
 
+    def _new_client(self):
+        return clickhouse_connect.get_client(
+            host=self.settings.clickhouse.host,
+            port=self.settings.clickhouse.port,
+            username=self.settings.clickhouse.user,
+            password=self.settings.clickhouse.password,
+            database="default",
+        )
+
+    @property
+    def client(self):
+        client = getattr(self._local, "client", None)
+        if client is None:
+            client = self._new_client()
+            self._local.client = client
+        return client
+
     def migrate(self) -> None:
         statements = load_schema_sql()
         for statement in statements:
@@ -39,7 +58,7 @@ class ClickHouseRepository:
                 f"CREATE DATABASE IF NOT EXISTS {self.database}",
             ).replace("ct_analyzer.", f"{self.database}.")
             LOGGER.info("Applying migration statement")
-            self.client.command(rewritten)
+            self._base_client.command(rewritten)
 
     def insert_rows(self, table: str, rows: list[dict[str, Any]]) -> None:
         if not rows:
