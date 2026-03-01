@@ -11,6 +11,7 @@ from typing import Any
 from ct_analyzer.analysis.anomalies import analyze_certificate
 from ct_analyzer.analysis.baseline import BaselineCache
 from ct_analyzer.analysis.lint import lint_certificate
+from ct_analyzer.analysis.zlint import run_zlint
 from ct_analyzer.cert.domains import get_registered_domain, tokenize_domain
 from ct_analyzer.cert.fingerprint import cert_sha256_hex, public_key_sha256_hex
 from ct_analyzer.cert.parse import (
@@ -147,6 +148,7 @@ class IngestionPipeline:
         baseline = await self.baselines.get(issuer_key_value, self.settings.window_days)
         _, _, anomaly_finding = analyze_certificate(metadata, self.settings, baseline=baseline)
         lint_findings = lint_certificate(metadata, self.settings)
+        zlint_findings = await asyncio.to_thread(run_zlint, leaf_der, metadata.cert_hash, self.settings)
         observations = _build_observations(
             cert_hash=metadata.cert_hash,
             dns_names=metadata.dns_names,
@@ -157,7 +159,7 @@ class IngestionPipeline:
         return {
             "certificates": [metadata.to_row()],
             "observations": [observation.to_row() for observation in observations],
-            "findings": _finding_rows([*lint_findings, anomaly_finding]),
+            "findings": _finding_rows([*lint_findings, *zlint_findings, anomaly_finding]),
         }
 
     async def _writer(self, queue: asyncio.Queue[dict[str, list[dict[str, Any]]]]) -> None:

@@ -49,6 +49,13 @@ class SessionSettings(BaseModel):
     https_only: bool = False
 
 
+class ZLintSettings(BaseModel):
+    enabled: bool = False
+    bin_path: str = "zlint"
+    args: list[str] = Field(default_factory=lambda: ["-format", "json"])
+    timeout_seconds: float = 10.0
+
+
 class MCPSettings(BaseModel):
     allowed_hosts: list[str] = Field(
         default_factory=lambda: ["127.0.0.1:*", "localhost:*", "[::1]:*"]
@@ -105,6 +112,7 @@ class Settings(BaseModel):
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)
+    zlint: ZLintSettings = Field(default_factory=ZLintSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     matching: IssuerMatchingSettings = Field(default_factory=IssuerMatchingSettings)
@@ -144,6 +152,12 @@ class Settings(BaseModel):
                 cookie_name=os.getenv("SESSION_COOKIE_NAME", "ct_analyzer_session"),
                 https_only=os.getenv("SESSION_HTTPS_ONLY", "false").lower()
                 in {"1", "true", "yes", "on"},
+            ),
+            zlint=ZLintSettings(
+                enabled=os.getenv("ZLINT_ENABLED", "false").lower() in {"1", "true", "yes", "on"},
+                bin_path=os.getenv("ZLINT_BIN_PATH", "zlint"),
+                args=_split_csv(os.getenv("ZLINT_ARGS", "-format,json")),
+                timeout_seconds=_env_float("ZLINT_TIMEOUT_SECONDS", 10.0),
             ),
             mcp=MCPSettings(
                 allowed_hosts=_split_csv(

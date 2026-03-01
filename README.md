@@ -8,6 +8,7 @@
 - Configurable GoDaddy / Starfield issuer matching by issuer DN, issuer SPKI hash, or hybrid mode
 - Deduplicated `certificates` storage with append-only `observations` and `cert_findings`
 - Rule-based X.509 lint checks and explainable anomaly scoring with issuer baselines
+- Optional `zlint` enrichment for broader X.509 standards/compliance findings
 - FastAPI endpoints for issuer summary stats and top anomalies
 - Built-in reporting UI for issuer snapshots, grouped breakdowns, and anomaly review
 - MCP-compatible tools/resources server for natural-language CT queries from MCP clients
@@ -174,6 +175,8 @@ Key environment variables:
 - `WINDOW_DAYS`
 - `CERTSTREAM_URL`
 - `AUTH_ENABLED`, `API_KEYS`
+- `UI_ADMIN_USERNAME`, `UI_ADMIN_PASSWORD`, `SESSION_SECRET_KEY`, `SESSION_COOKIE_NAME`, `SESSION_HTTPS_ONLY`
+- `ZLINT_ENABLED`, `ZLINT_BIN_PATH`, `ZLINT_ARGS`, `ZLINT_TIMEOUT_SECONDS`
 - `GODADDY_MATCH_MODE`
 - `GODADDY_ISSUER_SUBSTRINGS`
 - `GODADDY_ISSUER_SPKI_HASHES`
@@ -213,6 +216,19 @@ SESSION_SECRET_KEY=replace-with-a-long-random-secret
 SESSION_COOKIE_NAME=ct_analyzer_session
 SESSION_HTTPS_ONLY=true
 ```
+
+To enable optional `zlint` enrichment during ingest, install a local `zlint` binary on the host or in the container image and configure:
+
+```env
+ZLINT_ENABLED=true
+ZLINT_BIN_PATH=zlint
+ZLINT_ARGS=-format,json
+ZLINT_TIMEOUT_SECONDS=10
+```
+
+When enabled, matched certificates are run through `zlint` during ingest and any non-pass results are stored as additional `cert_findings` with a `ZLINT_` prefix. The ingest pipeline does not fail if `zlint` is missing or times out; it logs and continues.
+
+The provided Docker image now bakes in a pinned `zlint` binary, so containerized deployments only need to set `ZLINT_ENABLED=true` and rebuild the image.
 
 Issuer matching behavior:
 
