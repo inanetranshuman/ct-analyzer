@@ -141,6 +141,21 @@ Additional investigation endpoints expose bounded raw detail for drill-down and 
 - issuer profile/baseline summaries for common GoDaddy certificate attributes
 - grouped issuer breakdowns by signature algorithm, key type, EKU set, finding code, anomaly bucket, domain, and other bounded dimensions
 
+Supported breakdown `group_by` values:
+
+- `issuer_cn`
+- `issuer_dn`
+- `sig_alg`
+- `key_type`
+- `key_size`
+- `eku_set`
+- `finding_code`
+- `severity`
+- `anomaly_bucket`
+- `registered_domain`
+- `validity_bucket`
+- `san_count_bucket`
+
 ## Configuration
 
 Key environment variables:

@@ -124,7 +124,7 @@ def build_router(
     async def issuer_breakdown(
         group_by: str = Query(
             default="sig_alg",
-            pattern="^(sig_alg|key_type|key_size|eku_set|finding_code|severity|anomaly_bucket|registered_domain|validity_bucket|san_count_bucket)$",
+            pattern="^(issuer_cn|issuer_dn|sig_alg|key_type|key_size|eku_set|finding_code|severity|anomaly_bucket|registered_domain|validity_bucket|san_count_bucket)$",
         ),
         days: int = Query(default=30, ge=1, le=365),
         limit: int = Query(default=10, ge=1, le=100),

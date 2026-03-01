@@ -331,6 +331,8 @@ class ClickHouseRepository:
     def query_issuer_breakdown(self, group_by: str, days: int, limit: int) -> dict[str, Any]:
         cutoff = datetime.now(tz=UTC) - timedelta(days=days)
         groupings = {
+            "issuer_cn": ("c.issuer_cn", "issuer_common_name"),
+            "issuer_dn": ("c.issuer_dn", "issuer_distinguished_name"),
             "sig_alg": ("c.sig_alg", "signature_algorithm"),
             "key_type": ("c.key_type", "key_type"),
             "key_size": ("toString(c.key_size)", "key_size"),
