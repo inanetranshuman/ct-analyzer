@@ -67,8 +67,12 @@ def _certificate_search_payload(
     subject_cn_contains: str | None = None,
     issuer_contains: str | None = None,
     eku_contains: str | None = None,
+    finding_code: str | None = None,
+    finding_code_contains: str | None = None,
     has_wildcard: bool | None = None,
     has_punycode: bool | None = None,
+    min_validity_days: int | None = None,
+    max_validity_days: int | None = None,
     min_anomaly_score: int | None = None,
 ) -> dict[str, Any]:
     return {
@@ -81,8 +85,12 @@ def _certificate_search_payload(
             subject_cn_contains=subject_cn_contains,
             issuer_contains=issuer_contains,
             eku_contains=eku_contains,
+            finding_code=finding_code,
+            finding_code_contains=finding_code_contains,
             has_wildcard=has_wildcard,
             has_punycode=has_punycode,
+            min_validity_days=min_validity_days,
+            max_validity_days=max_validity_days,
             min_anomaly_score=min_anomaly_score,
         ),
     }
@@ -173,8 +181,12 @@ def create_mcp_server(
         subject_cn_contains: str | None = None,
         issuer_contains: str | None = None,
         eku_contains: str | None = None,
+        finding_code: str | None = None,
+        finding_code_contains: str | None = None,
         has_wildcard: bool | None = None,
         has_punycode: bool | None = None,
+        min_validity_days: int | None = None,
+        max_validity_days: int | None = None,
         min_anomaly_score: int | None = None,
     ) -> dict[str, Any]:
         """Search recent certificates with bounded filters for investigation pivots."""
@@ -188,8 +200,12 @@ def create_mcp_server(
             subject_cn_contains=subject_cn_contains,
             issuer_contains=issuer_contains,
             eku_contains=eku_contains,
+            finding_code=finding_code,
+            finding_code_contains=finding_code_contains,
             has_wildcard=has_wildcard,
             has_punycode=has_punycode,
+            min_validity_days=min_validity_days,
+            max_validity_days=max_validity_days,
             min_anomaly_score=min_anomaly_score,
         )
 

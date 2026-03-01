@@ -553,8 +553,12 @@ class ClickHouseRepository:
         subject_cn_contains: str | None = None,
         issuer_contains: str | None = None,
         eku_contains: str | None = None,
+        finding_code: str | None = None,
+        finding_code_contains: str | None = None,
         has_wildcard: bool | None = None,
         has_punycode: bool | None = None,
+        min_validity_days: int | None = None,
+        max_validity_days: int | None = None,
         min_anomaly_score: int | None = None,
     ) -> list[dict[str, Any]]:
         cutoff = datetime.now(tz=UTC) - timedelta(days=days)
@@ -574,12 +578,32 @@ class ClickHouseRepository:
                 "arrayExists(eku_value -> positionCaseInsensitive(eku_value, %(eku_contains)s) > 0, c.eku)"
             )
             parameters["eku_contains"] = eku_contains
+        if finding_code:
+            where_clauses.append(
+                "c.cert_hash IN (SELECT cert_hash FROM {findings} WHERE finding_code = %(finding_code)s)".format(
+                    findings=self._qualified("cert_findings")
+                )
+            )
+            parameters["finding_code"] = finding_code
+        if finding_code_contains:
+            where_clauses.append(
+                "c.cert_hash IN (SELECT cert_hash FROM {findings} WHERE positionCaseInsensitive(finding_code, %(finding_code_contains)s) > 0)".format(
+                    findings=self._qualified("cert_findings")
+                )
+            )
+            parameters["finding_code_contains"] = finding_code_contains
         if has_wildcard is not None:
             where_clauses.append("c.has_wildcard = %(has_wildcard)s")
             parameters["has_wildcard"] = int(has_wildcard)
         if has_punycode is not None:
             where_clauses.append("c.has_punycode = %(has_punycode)s")
             parameters["has_punycode"] = int(has_punycode)
+        if min_validity_days is not None:
+            where_clauses.append("c.validity_days >= %(min_validity_days)s")
+            parameters["min_validity_days"] = min_validity_days
+        if max_validity_days is not None:
+            where_clauses.append("c.validity_days <= %(max_validity_days)s")
+            parameters["max_validity_days"] = max_validity_days
         if min_anomaly_score is not None:
             where_clauses.append("c.anomaly_score >= %(min_anomaly_score)s")
             parameters["min_anomaly_score"] = min_anomaly_score
@@ -592,6 +616,7 @@ class ClickHouseRepository:
                 c.issuer_dn,
                 c.dns_names,
                 c.eku,
+                c.validity_days,
                 c.has_wildcard,
                 c.has_punycode,
                 c.anomaly_score,
@@ -607,6 +632,7 @@ class ClickHouseRepository:
                 c.issuer_dn,
                 c.dns_names,
                 c.eku,
+                c.validity_days,
                 c.has_wildcard,
                 c.has_punycode,
                 c.anomaly_score
@@ -622,6 +648,7 @@ class ClickHouseRepository:
                 "issuer_dn": issuer_dn,
                 "dns_names": list(dns_names)[:10],
                 "eku": list(eku_values),
+                "validity_days": int(validity_days),
                 "has_wildcard": bool(has_wildcard_value),
                 "has_punycode": bool(has_punycode_value),
                 "anomaly_score": int(anomaly_score),
@@ -634,6 +661,7 @@ class ClickHouseRepository:
                 issuer_dn,
                 dns_names,
                 eku_values,
+                validity_days,
                 has_wildcard_value,
                 has_punycode_value,
                 anomaly_score,

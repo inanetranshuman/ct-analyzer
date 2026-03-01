@@ -92,7 +92,7 @@ docker compose up -d rollup
 - `GET /breakdown/issuer/godaddy?group_by=sig_alg&days=30&limit=10`
 - `GET /anomalies/issuer/godaddy?days=7&limit=50`
 - `GET /certificates/{cert_hash}`
-- `GET /certificates/search?...` including bounded `eku_contains` filtering
+- `GET /certificates/search?...` including bounded `eku_contains`, `finding_code`, and validity-range filtering
 - `GET /domains/{registered_domain}/activity?days=7&limit=25`
 
 The same `python -m ct_analyzer api` process also mounts a Streamable HTTP MCP endpoint at `http://localhost:8000/mcp`.
@@ -148,6 +148,7 @@ Additional investigation endpoints expose bounded raw detail for drill-down and 
 - certificate lookup by `cert_hash`
 - recent certificate search with bounded filters and limits
 - EKU substring filtering to help agents find unusual or exact dotted OIDs
+- direct finding-code filtering so agents can retrieve certificates matching a specific `ZLINT_...` rule or custom finding
 - recent activity for one registered domain
 - issuer profile/baseline summaries for common GoDaddy certificate attributes
 - grouped issuer breakdowns by signature algorithm, key type, EKU set, finding code, anomaly bucket, domain, and other bounded dimensions
