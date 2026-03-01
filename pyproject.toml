@@ -12,6 +12,7 @@ dependencies = [
   "clickhouse-connect>=0.8.0",
   "cryptography>=44.0.0",
   "fastapi>=0.116.0",
+  "itsdangerous>=2.2.0",
   "mcp[cli]>=1.0,<2.0",
   "publicsuffix2>=2.20191221",
   "pydantic>=2.10.0",
