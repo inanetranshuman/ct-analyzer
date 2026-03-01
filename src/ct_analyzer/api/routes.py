@@ -22,6 +22,19 @@ class IssuerStatsResponse(BaseModel):
     aggregated_counts: dict[str, int]
 
 
+class IssuerProfileResponse(BaseModel):
+    issuer: str
+    days: int
+    cert_count: int
+    validity_days: dict[str, float]
+    san_count: dict[str, float]
+    feature_rates: dict[str, float]
+    top_signature_algorithms: list[dict[str, Any]]
+    top_key_types: list[dict[str, Any]]
+    top_key_sizes: list[dict[str, Any]]
+    top_eku_sets: list[dict[str, Any]]
+
+
 class AnomalyRecordResponse(BaseModel):
     cert_hash: str
     subject_cn: str
@@ -89,6 +102,15 @@ def build_router(
             days=days,
             aggregated_counts={key: value for key, value in stats.items() if key != "days"},
         )
+
+    @router.get("/profile/issuer/godaddy", response_model=IssuerProfileResponse)
+    async def issuer_profile(
+        days: int = Query(default=30, ge=1, le=365),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> IssuerProfileResponse:
+        profile = await asyncio.to_thread(repository.query_issuer_profile, days)
+        return IssuerProfileResponse(**profile)
 
     @router.get("/anomalies/issuer/godaddy", response_model=IssuerAnomaliesResponse)
     async def issuer_anomalies(

@@ -80,6 +80,7 @@ docker compose up -d rollup
 
 - `GET /health`
 - `GET /stats/issuer/godaddy?days=30`
+- `GET /profile/issuer/godaddy?days=30`
 - `GET /anomalies/issuer/godaddy?days=7&limit=50`
 - `GET /certificates/{cert_hash}`
 - `GET /certificates/search?...`
@@ -90,6 +91,7 @@ The same `python -m ct_analyzer api` process also mounts a Streamable HTTP MCP e
 Available MCP tools:
 
 - `get_issuer_stats(days=30)`
+- `get_issuer_profile(days=30)`
 - `get_anomalies(days=7, limit=50)`
 - `get_certificate(cert_hash)`
 - `search_recent_certificates(...)`
@@ -100,6 +102,7 @@ Available MCP tools:
 Available MCP resources:
 
 - `ct://issuer/godaddy/stats/{days}`
+- `ct://issuer/godaddy/profile/{days}`
 - `ct://issuer/godaddy/anomalies/{days}/{limit}`
 - `ct://certificate/{cert_hash}`
 - `ct://domain/{registered_domain}/activity/{days}/{limit}`
@@ -132,6 +135,7 @@ Additional investigation endpoints expose bounded raw detail for drill-down and 
 - certificate lookup by `cert_hash`
 - recent certificate search with bounded filters and limits
 - recent activity for one registered domain
+- issuer profile/baseline summaries for common GoDaddy certificate attributes
 
 ## Configuration
 

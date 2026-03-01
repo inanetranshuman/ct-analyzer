@@ -41,6 +41,10 @@ def _issuer_anomalies_payload(
     }
 
 
+def _issuer_profile_payload(repository: ClickHouseRepository, days: int) -> dict[str, Any]:
+    return repository.query_issuer_profile(days)
+
+
 def _certificate_details_payload(repository: ClickHouseRepository, cert_hash: str) -> dict[str, Any] | None:
     return repository.get_certificate_details(cert_hash)
 
@@ -129,6 +133,12 @@ def create_mcp_server(
         return await asyncio.to_thread(_issuer_anomalies_payload, repository, days, limit)
 
     @mcp.tool()
+    async def get_issuer_profile(days: int = 30) -> dict[str, Any]:
+        """Return a baseline profile for normal GoDaddy/Starfield certificate attributes."""
+        repository = get_repository()
+        return await asyncio.to_thread(_issuer_profile_payload, repository, days)
+
+    @mcp.tool()
     async def get_certificate(cert_hash: str) -> dict[str, Any]:
         """Return a single certificate record plus findings by certificate hash."""
         repository = get_repository()
@@ -191,6 +201,13 @@ def create_mcp_server(
         """Read-only JSON snapshot of current anomaly results."""
         repository = get_repository()
         payload = await asyncio.to_thread(_issuer_anomalies_payload, repository, days, limit)
+        return json.dumps(payload, indent=2, sort_keys=True)
+
+    @mcp.resource("ct://issuer/godaddy/profile/{days}")
+    async def issuer_profile_resource(days: int) -> str:
+        """Read-only JSON snapshot of the GoDaddy/Starfield issuer baseline profile."""
+        repository = get_repository()
+        payload = await asyncio.to_thread(_issuer_profile_payload, repository, days)
         return json.dumps(payload, indent=2, sort_keys=True)
 
     @mcp.resource("ct://certificate/{cert_hash}")

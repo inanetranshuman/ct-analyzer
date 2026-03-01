@@ -221,6 +221,113 @@ class ClickHouseRepository:
             "ca_true_leaf_count": int(rows[8]),
         }
 
+    def query_issuer_profile(self, days: int) -> dict[str, Any]:
+        cutoff = datetime.now(tz=UTC) - timedelta(days=days)
+        summary_row = self.client.query(
+            f"""
+            SELECT
+                count() AS cert_count,
+                quantileTDigest(0.5)(c.validity_days) AS validity_p50,
+                quantileTDigest(0.95)(c.validity_days) AS validity_p95,
+                quantileTDigest(0.5)(c.san_count) AS san_count_p50,
+                quantileTDigest(0.95)(c.san_count) AS san_count_p95,
+                avg(c.has_wildcard) AS wildcard_rate,
+                avg(c.has_punycode) AS punycode_rate,
+                avg(c.has_ip_san) AS ip_san_rate,
+                avg(c.has_uri_san) AS uri_san_rate,
+                avg(c.has_email_san) AS email_san_rate,
+                avg(c.has_must_staple) AS must_staple_rate,
+                avg(c.basic_constraints_ca) AS ca_true_rate
+            FROM {self._qualified("observations")} AS o
+            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                ON c.cert_hash = o.cert_hash
+            WHERE o.seen_at >= %(cutoff)s
+            """,
+            parameters={"cutoff": cutoff},
+        ).first_row or (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+        def _top_rows(query: str) -> list[dict[str, Any]]:
+            rows = self.client.query(query, parameters={"cutoff": cutoff}).result_rows
+            return [{"value": row[0], "count": int(row[1])} for row in rows]
+
+        top_sig_algs = _top_rows(
+            f"""
+            SELECT c.sig_alg, count() AS count
+            FROM {self._qualified("observations")} AS o
+            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                ON c.cert_hash = o.cert_hash
+            WHERE o.seen_at >= %(cutoff)s
+            GROUP BY c.sig_alg
+            ORDER BY count DESC
+            LIMIT 5
+            """
+        )
+        top_key_types = _top_rows(
+            f"""
+            SELECT c.key_type, count() AS count
+            FROM {self._qualified("observations")} AS o
+            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                ON c.cert_hash = o.cert_hash
+            WHERE o.seen_at >= %(cutoff)s
+            GROUP BY c.key_type
+            ORDER BY count DESC
+            LIMIT 5
+            """
+        )
+        top_key_sizes = _top_rows(
+            f"""
+            SELECT toString(c.key_size), count() AS count
+            FROM {self._qualified("observations")} AS o
+            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                ON c.cert_hash = o.cert_hash
+            WHERE o.seen_at >= %(cutoff)s
+            GROUP BY c.key_size
+            ORDER BY count DESC
+            LIMIT 5
+            """
+        )
+        top_eku_sets = _top_rows(
+            f"""
+            SELECT
+                if(length(c.eku) = 0, '(none)', arrayStringConcat(arraySort(c.eku), ',')) AS eku_set,
+                count() AS count
+            FROM {self._qualified("observations")} AS o
+            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                ON c.cert_hash = o.cert_hash
+            WHERE o.seen_at >= %(cutoff)s
+            GROUP BY eku_set
+            ORDER BY count DESC
+            LIMIT 5
+            """
+        )
+
+        return {
+            "issuer": "godaddy",
+            "days": days,
+            "cert_count": int(summary_row[0] or 0),
+            "validity_days": {
+                "p50": float(summary_row[1] or 0),
+                "p95": float(summary_row[2] or 0),
+            },
+            "san_count": {
+                "p50": float(summary_row[3] or 0),
+                "p95": float(summary_row[4] or 0),
+            },
+            "feature_rates": {
+                "wildcard_rate": float(summary_row[5] or 0),
+                "punycode_rate": float(summary_row[6] or 0),
+                "ip_san_rate": float(summary_row[7] or 0),
+                "uri_san_rate": float(summary_row[8] or 0),
+                "email_san_rate": float(summary_row[9] or 0),
+                "must_staple_rate": float(summary_row[10] or 0),
+                "ca_true_rate": float(summary_row[11] or 0),
+            },
+            "top_signature_algorithms": top_sig_algs,
+            "top_key_types": top_key_types,
+            "top_key_sizes": top_key_sizes,
+            "top_eku_sets": top_eku_sets,
+        }
+
     def query_anomalies(self, days: int, limit: int) -> list[dict[str, Any]]:
         cutoff = datetime.now(tz=UTC) - timedelta(days=days)
         cert_rows = self.client.query(
