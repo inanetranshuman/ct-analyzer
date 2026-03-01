@@ -344,6 +344,7 @@ body.is-loading .panel::after {
   background:
     radial-gradient(circle at top right, rgba(191, 95, 47, 0.12), transparent 40%),
     rgba(255, 251, 244, 0.95);
+  cursor: pointer;
 }
 
 .anomaly-head {
@@ -362,12 +363,34 @@ body.is-loading .panel::after {
   margin: 0;
   color: var(--muted);
   font-size: 0.78rem;
+  overflow-wrap: anywhere;
 }
 
 .dns-sample {
   margin: 0;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.dns-name-row {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.dns-ascii,
+.dns-unicode {
+  overflow-wrap: anywhere;
+}
+
+.dns-ascii {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.82rem;
+}
+
+.dns-unicode {
+  color: var(--ink);
+  font-size: 0.92rem;
 }
 
 .score-pill {
@@ -383,6 +406,132 @@ body.is-loading .panel::after {
 .signal-list {
   margin: 14px 0 0;
   padding-left: 18px;
+  color: var(--muted);
+}
+
+.detail-modal[hidden] {
+  display: none;
+}
+
+.detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.detail-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 22, 29, 0.56);
+  backdrop-filter: blur(8px);
+}
+
+.detail-sheet {
+  position: relative;
+  width: min(920px, calc(100% - 24px));
+  max-height: calc(100vh - 24px);
+  margin: 12px auto;
+  overflow: auto;
+  padding: 24px;
+  border-radius: 24px;
+  background: #fffaf2;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.24);
+}
+
+.detail-close {
+  position: sticky;
+  top: 0;
+  margin-left: auto;
+  display: block;
+  z-index: 2;
+}
+
+.detail-header h2 {
+  margin: 0 0 10px;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 2rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 18px;
+}
+
+.detail-block,
+.detail-section {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.detail-dl {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-dl div {
+  display: grid;
+  gap: 4px;
+}
+
+.detail-dl dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.detail-dl dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detail-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.detail-signal-grid,
+.detail-finding-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-signal-card,
+.detail-finding-row {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 249, 0.9);
+}
+
+.detail-signal-head,
+.detail-finding-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.detail-signal-card p {
+  margin: 10px 0;
+  color: var(--muted);
+}
+
+.json-block {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 12px;
+  background: #17222d;
+  color: #f5f1e8;
+  font-size: 0.82rem;
+}
+
+.detail-loading {
   color: var(--muted);
 }
 
@@ -453,6 +602,10 @@ body.is-loading .panel::after {
 
   .metric-cards,
   .anomaly-list {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-grid {
     grid-template-columns: 1fr;
   }
 }
