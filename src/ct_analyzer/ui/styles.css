@@ -125,6 +125,12 @@ button {
   font-weight: 700;
 }
 
+button:disabled,
+select:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .auth-status {
   margin: 12px 0 0;
   color: var(--muted);
@@ -147,6 +153,29 @@ button {
 
 .panel {
   padding: 22px;
+}
+
+body.is-loading .panel {
+  opacity: 0.72;
+}
+
+body.is-loading .panel::after {
+  content: "Updating...";
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(23, 34, 45, 0.9);
+  color: white;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.panel {
+  position: relative;
+  transition: opacity 140ms ease;
 }
 
 .panel-metrics {

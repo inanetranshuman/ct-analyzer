@@ -43,6 +43,20 @@ def has_punycode(hostname: str) -> bool:
     return "xn--" in normalize_hostname(hostname)
 
 
+def to_unicode_hostname(hostname: str) -> str:
+    value = normalize_hostname(hostname)
+    if not value:
+        return ""
+    wildcard = value.startswith("*.")
+    if wildcard:
+        value = value[2:]
+    try:
+        decoded = value.encode("ascii").decode("idna")
+    except UnicodeError:
+        decoded = value
+    return f"*.{decoded}" if wildcard else decoded
+
+
 def shannon_entropy(value: str) -> float:
     if not value:
         return 0.0

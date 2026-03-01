@@ -10,6 +10,7 @@ from typing import Any
 import clickhouse_connect
 
 from ct_analyzer.analysis.baseline import IssuerBaseline
+from ct_analyzer.cert.domains import to_unicode_hostname
 from ct_analyzer.config import Settings
 from ct_analyzer.db.migrations import load_schema_sql
 
@@ -227,21 +228,35 @@ class ClickHouseRepository:
             f"""
             SELECT
                 count() AS cert_count,
-                quantileTDigest(0.5)(c.validity_days) AS validity_p50,
-                quantileTDigest(0.95)(c.validity_days) AS validity_p95,
-                quantileTDigest(0.5)(c.san_count) AS san_count_p50,
-                quantileTDigest(0.95)(c.san_count) AS san_count_p95,
-                avg(c.has_wildcard) AS wildcard_rate,
-                avg(c.has_punycode) AS punycode_rate,
-                avg(c.has_ip_san) AS ip_san_rate,
-                avg(c.has_uri_san) AS uri_san_rate,
-                avg(c.has_email_san) AS email_san_rate,
-                avg(c.has_must_staple) AS must_staple_rate,
-                avg(c.basic_constraints_ca) AS ca_true_rate
-            FROM {self._qualified("observations")} AS o
-            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                ON c.cert_hash = o.cert_hash
-            WHERE o.seen_at >= %(cutoff)s
+                quantileTDigest(0.5)(validity_days) AS validity_p50,
+                quantileTDigest(0.95)(validity_days) AS validity_p95,
+                quantileTDigest(0.5)(san_count) AS san_count_p50,
+                quantileTDigest(0.95)(san_count) AS san_count_p95,
+                avg(has_wildcard) AS wildcard_rate,
+                avg(has_punycode) AS punycode_rate,
+                avg(has_ip_san) AS ip_san_rate,
+                avg(has_uri_san) AS uri_san_rate,
+                avg(has_email_san) AS email_san_rate,
+                avg(has_must_staple) AS must_staple_rate,
+                avg(basic_constraints_ca) AS ca_true_rate
+            FROM
+            (
+                SELECT DISTINCT
+                    c.cert_hash,
+                    c.validity_days,
+                    c.san_count,
+                    c.has_wildcard,
+                    c.has_punycode,
+                    c.has_ip_san,
+                    c.has_uri_san,
+                    c.has_email_san,
+                    c.has_must_staple,
+                    c.basic_constraints_ca
+                FROM {self._qualified("observations")} AS o
+                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                    ON c.cert_hash = o.cert_hash
+                WHERE o.seen_at >= %(cutoff)s
+            )
             """,
             parameters={"cutoff": cutoff},
         ).first_row or (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -252,36 +267,48 @@ class ClickHouseRepository:
 
         top_sig_algs = _top_rows(
             f"""
-            SELECT c.sig_alg, count() AS count
-            FROM {self._qualified("observations")} AS o
-            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                ON c.cert_hash = o.cert_hash
-            WHERE o.seen_at >= %(cutoff)s
-            GROUP BY c.sig_alg
+            SELECT sig_alg, count() AS count
+            FROM
+            (
+                SELECT DISTINCT c.cert_hash, c.sig_alg
+                FROM {self._qualified("observations")} AS o
+                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                    ON c.cert_hash = o.cert_hash
+                WHERE o.seen_at >= %(cutoff)s
+            )
+            GROUP BY sig_alg
             ORDER BY count DESC
             LIMIT 5
             """
         )
         top_key_types = _top_rows(
             f"""
-            SELECT c.key_type, count() AS count
-            FROM {self._qualified("observations")} AS o
-            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                ON c.cert_hash = o.cert_hash
-            WHERE o.seen_at >= %(cutoff)s
-            GROUP BY c.key_type
+            SELECT key_type, count() AS count
+            FROM
+            (
+                SELECT DISTINCT c.cert_hash, c.key_type
+                FROM {self._qualified("observations")} AS o
+                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                    ON c.cert_hash = o.cert_hash
+                WHERE o.seen_at >= %(cutoff)s
+            )
+            GROUP BY key_type
             ORDER BY count DESC
             LIMIT 5
             """
         )
         top_key_sizes = _top_rows(
             f"""
-            SELECT toString(c.key_size), count() AS count
-            FROM {self._qualified("observations")} AS o
-            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                ON c.cert_hash = o.cert_hash
-            WHERE o.seen_at >= %(cutoff)s
-            GROUP BY c.key_size
+            SELECT toString(key_size), count() AS count
+            FROM
+            (
+                SELECT DISTINCT c.cert_hash, c.key_size
+                FROM {self._qualified("observations")} AS o
+                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                    ON c.cert_hash = o.cert_hash
+                WHERE o.seen_at >= %(cutoff)s
+            )
+            GROUP BY key_size
             ORDER BY count DESC
             LIMIT 5
             """
@@ -289,12 +316,18 @@ class ClickHouseRepository:
         top_eku_sets = _top_rows(
             f"""
             SELECT
-                if(length(c.eku) = 0, '(none)', arrayStringConcat(arraySort(c.eku), ',')) AS eku_set,
+                eku_set,
                 count() AS count
-            FROM {self._qualified("observations")} AS o
-            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                ON c.cert_hash = o.cert_hash
-            WHERE o.seen_at >= %(cutoff)s
+            FROM
+            (
+                SELECT DISTINCT
+                    c.cert_hash,
+                    if(length(c.eku) = 0, '(none)', arrayStringConcat(arraySort(c.eku), ',')) AS eku_set
+                FROM {self._qualified("observations")} AS o
+                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                    ON c.cert_hash = o.cert_hash
+                WHERE o.seen_at >= %(cutoff)s
+            )
             GROUP BY eku_set
             ORDER BY count DESC
             LIMIT 5
@@ -357,31 +390,53 @@ class ClickHouseRepository:
             raise ValueError(f"Unsupported group_by value: {group_by}")
 
         expr, label = groupings[group_by]
-        join_findings = "LEFT JOIN {findings} AS f ON f.cert_hash = c.cert_hash".format(
-            findings=self._qualified("cert_findings")
-        )
-        if group_by not in {"finding_code", "severity"}:
-            join_findings = ""
-            where_clause = "o.seen_at >= %(cutoff)s"
+        if group_by in {"finding_code", "severity"}:
+            rows = self.client.query(
+                f"""
+                SELECT
+                    grouping_value,
+                    count() AS count
+                FROM
+                (
+                    SELECT DISTINCT
+                        c.cert_hash,
+                        {expr} AS grouping_value
+                    FROM {self._qualified("observations")} AS o
+                    INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                        ON c.cert_hash = o.cert_hash
+                    LEFT JOIN {self._qualified("cert_findings")} AS f
+                        ON f.cert_hash = c.cert_hash
+                    WHERE o.seen_at >= %(cutoff)s
+                      AND f.created_at >= %(cutoff)s
+                )
+                GROUP BY grouping_value
+                ORDER BY count DESC
+                LIMIT %(limit)s
+                """,
+                parameters={"cutoff": cutoff, "limit": limit},
+            ).result_rows
         else:
-            where_clause = "o.seen_at >= %(cutoff)s AND f.created_at >= %(cutoff)s"
-
-        rows = self.client.query(
-            f"""
-            SELECT
-                {expr} AS grouping_value,
-                count() AS count
-            FROM {self._qualified("observations")} AS o
-            INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                ON c.cert_hash = o.cert_hash
-            {join_findings}
-            WHERE {where_clause}
-            GROUP BY grouping_value
-            ORDER BY count DESC
-            LIMIT %(limit)s
-            """,
-            parameters={"cutoff": cutoff, "limit": limit},
-        ).result_rows
+            rows = self.client.query(
+                f"""
+                SELECT
+                    grouping_value,
+                    count() AS count
+                FROM
+                (
+                    SELECT DISTINCT
+                        c.cert_hash,
+                        {expr} AS grouping_value
+                    FROM {self._qualified("observations")} AS o
+                    INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
+                        ON c.cert_hash = o.cert_hash
+                    WHERE o.seen_at >= %(cutoff)s
+                )
+                GROUP BY grouping_value
+                ORDER BY count DESC
+                LIMIT %(limit)s
+                """,
+                parameters={"cutoff": cutoff, "limit": limit},
+            ).result_rows
         return {
             "issuer": "godaddy",
             "days": days,
@@ -438,11 +493,13 @@ class ClickHouseRepository:
         results: list[dict[str, Any]] = []
         for cert_hash, subject_cn, dns_names, anomaly_score, _last_seen, anomaly_evidence in cert_rows:
             evidence = json.loads(anomaly_evidence) if anomaly_evidence else {"top_signals": []}
+            dns_name_list = list(dns_names)[:5]
             results.append(
                 {
                     "cert_hash": cert_hash,
                     "subject_cn": subject_cn,
-                    "dns_names": list(dns_names)[:5],
+                    "dns_names": dns_name_list,
+                    "dns_names_unicode": [to_unicode_hostname(name) for name in dns_name_list],
                     "anomaly_score": int(anomaly_score),
                     "top_signals": evidence.get("top_signals", []),
                     "evidence": evidence,

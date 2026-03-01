@@ -2,6 +2,7 @@ const state = {
   days: 30,
   groupBy: "issuer_cn",
   sessionAuthenticated: false,
+  loading: false,
 };
 
 const els = {
@@ -24,6 +25,14 @@ const els = {
 function setAuthStatus(message, kind = "neutral") {
   els.authStatus.textContent = message;
   els.authStatus.dataset.kind = kind;
+}
+
+function setLoadingState(isLoading) {
+  state.loading = isLoading;
+  document.body.classList.toggle("is-loading", isLoading);
+  els.days.disabled = isLoading;
+  els.groupBy.disabled = isLoading;
+  els.logoutButton.disabled = isLoading;
 }
 
 function authHeaders() {
@@ -135,9 +144,18 @@ function renderAnomalies(payload) {
     const card = document.createElement("article");
     card.className = "anomaly-card";
     const signals = anomaly.top_signals
-      .map((signal) => `<li>${signal.code}: ${signal.weight}</li>`)
+      .map((signal) => `<li>${signal.code} (${signal.severity}): ${signal.score}</li>`)
       .join("");
-    const dnsNames = anomaly.dns_names.slice(0, 3).join(", ");
+    const dnsNames = anomaly.dns_names
+      .slice(0, 3)
+      .map((name, index) => {
+        const unicodeName = anomaly.dns_names_unicode?.[index];
+        if (unicodeName && unicodeName !== name) {
+          return `${unicodeName} (${name})`;
+        }
+        return name;
+      })
+      .join(", ");
     card.innerHTML = `
       <div class="anomaly-head">
         <div>
@@ -154,6 +172,7 @@ function renderAnomalies(payload) {
 }
 
 async function refreshDashboard() {
+  setLoadingState(true);
   setAuthStatus("Loading data...", "neutral");
   try {
     const [stats, profile, breakdown, anomalies] = await Promise.all([
@@ -185,6 +204,8 @@ async function refreshDashboard() {
       return;
     }
     setAuthStatus(error.message, "error");
+  } finally {
+    setLoadingState(false);
   }
 }
 

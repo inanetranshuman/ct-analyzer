@@ -1,4 +1,4 @@
-from ct_analyzer.cert.domains import get_registered_domain, tokenize_domain
+from ct_analyzer.cert.domains import get_registered_domain, to_unicode_hostname, tokenize_domain
 
 
 def test_registered_domain_extraction() -> None:
@@ -13,3 +13,8 @@ def test_domain_tokenization() -> None:
         "example.com",
         "com",
     ]
+
+
+def test_unicode_hostname_conversion() -> None:
+    assert to_unicode_hostname("xn--bcher-kva.example") == "bücher.example"
+    assert to_unicode_hostname("*.xn--bcher-kva.example") == "*.bücher.example"

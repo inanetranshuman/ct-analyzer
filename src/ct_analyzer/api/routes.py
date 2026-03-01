@@ -47,6 +47,7 @@ class AnomalyRecordResponse(BaseModel):
     cert_hash: str
     subject_cn: str
     dns_names: list[str]
+    dns_names_unicode: list[str]
     anomaly_score: int
     top_signals: list[dict[str, Any]]
     evidence: dict[str, Any]
