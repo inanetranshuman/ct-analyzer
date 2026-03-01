@@ -357,7 +357,7 @@ body.is-loading .metric-card::after {
 
 .mini-stat-row,
 .rank-row,
-.rate-row {
+.template-row {
   display: grid;
   gap: 10px;
   align-items: center;
@@ -372,21 +372,38 @@ body.is-loading .metric-card::after {
   color: var(--muted);
 }
 
-.rate-row {
-  grid-template-columns: minmax(120px, 1fr) 1.7fr auto;
+.template-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-bottom: 1px solid #e6edf5;
+  gap: 14px;
 }
 
-.bar-track {
-  height: 10px;
-  border-radius: 999px;
-  background: #dde7f1;
-  overflow: hidden;
+.template-row:last-child {
+  border-bottom: 0;
 }
 
-.bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), #35c2ff);
+.template-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.template-attribute {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.template-value {
+  overflow-wrap: anywhere;
+}
+
+.template-support {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: right;
 }
 
 .rank-row {
@@ -455,9 +472,15 @@ body.is-loading .metric-card::after {
   align-items: start;
 }
 
+.anomaly-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .anomaly-head h3 {
-  margin: 6px 0;
+  margin: 0 0 8px;
   font-size: 1.02rem;
+  overflow-wrap: anywhere;
 }
 
 .cert-hash {
@@ -501,12 +524,14 @@ body.is-loading .metric-card::after {
   color: white;
   text-align: center;
   font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .signal-list {
   margin: 14px 0 0;
   padding-left: 18px;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .detail-modal[hidden] {

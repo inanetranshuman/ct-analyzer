@@ -28,7 +28,7 @@ const els = {
   metricCards: document.querySelector("#metric-cards"),
   validityStats: document.querySelector("#validity-stats"),
   sanStats: document.querySelector("#san-stats"),
-  featureRates: document.querySelector("#feature-rates"),
+  issuanceTemplates: document.querySelector("#issuance-templates"),
   sigAlgList: document.querySelector("#sig-alg-list"),
   keyTypeList: document.querySelector("#key-type-list"),
   ekuList: document.querySelector("#eku-list"),
@@ -107,17 +107,64 @@ function renderMiniStats(node, stats) {
   }
 }
 
-function renderRateList(node, rates) {
-  clearNode(node);
-  for (const [label, value] of Object.entries(rates)) {
-    const row = document.createElement("div");
-    row.className = "rate-row";
+function formatShare(count, total) {
+  if (!count || !total) {
+    return "No recent support";
+  }
+  return `${numberFormat(count)} certs · ${percentFormat(count / total)}`;
+}
+
+function renderIssuanceTemplates(profile) {
+  clearNode(els.issuanceTemplates);
+  const templates = [
+    {
+      attribute: "Signature Algorithm",
+      value: profile.top_signature_algorithms?.[0]?.value || "Unknown",
+      support: formatShare(profile.top_signature_algorithms?.[0]?.count, profile.cert_count),
+    },
+    {
+      attribute: "Key Type",
+      value: profile.top_key_types?.[0]?.value || "Unknown",
+      support: formatShare(profile.top_key_types?.[0]?.count, profile.cert_count),
+    },
+    {
+      attribute: "Key Size",
+      value: profile.top_key_sizes?.[0]?.value ? `${profile.top_key_sizes[0].value} bits` : "Unknown",
+      support: formatShare(profile.top_key_sizes?.[0]?.count, profile.cert_count),
+    },
+    {
+      attribute: "EKU Set",
+      value: profile.top_eku_sets?.[0]?.value || "Unknown",
+      support: formatShare(profile.top_eku_sets?.[0]?.count, profile.cert_count),
+    },
+    {
+      attribute: "Validity Pattern",
+      value:
+        profile.validity_days?.p50 === profile.validity_days?.p95
+          ? `${profile.validity_days.p50.toFixed(0)} days`
+          : `p50 ${profile.validity_days?.p50?.toFixed(0) || "0"} days · p95 ${profile.validity_days?.p95?.toFixed(0) || "0"} days`,
+      support: "Recent baseline window",
+    },
+    {
+      attribute: "SAN Pattern",
+      value:
+        profile.san_count?.p50 === profile.san_count?.p95
+          ? `${profile.san_count.p50.toFixed(0)} SAN`
+          : `p50 ${profile.san_count?.p50?.toFixed(0) || "0"} · p95 ${profile.san_count?.p95?.toFixed(0) || "0"}`,
+      support: "Recent baseline window",
+    },
+  ];
+  for (const template of templates) {
+    const row = document.createElement("article");
+    row.className = "template-row";
     row.innerHTML = `
-      <span>${label.replaceAll("_", " ")}</span>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.min((value ?? 0) * 100, 100)}%"></div></div>
-      <strong>${percentFormat(value)}</strong>
+      <div class="template-copy">
+        <span class="template-attribute">${template.attribute}</span>
+        <strong class="template-value">${template.value}</strong>
+      </div>
+      <span class="template-support">${template.support}</span>
     `;
-    node.appendChild(row);
+    els.issuanceTemplates.appendChild(row);
   }
 }
 
@@ -165,30 +212,38 @@ function renderAnomalies(payload) {
     const signals = anomaly.top_signals
       .map((signal) => `<li>${signal.code} (${signal.severity}): ${signal.score}</li>`)
       .join("");
-    const dnsNames = anomaly.dns_names
-      .slice(0, 3)
-      .map((name, index) => {
-        const unicodeName = anomaly.dns_names_unicode?.[index];
-        if (unicodeName && unicodeName !== name) {
+    const limitedDnsNames = anomaly.dns_names.slice(0, 3).map((name, index) => ({
+      ascii: name,
+      unicode: anomaly.dns_names_unicode?.[index] ?? name,
+    }));
+    const displayTitleSource = limitedDnsNames[0];
+    const subjectCn = anomaly.subject_cn || "No subject CN";
+    const titleText =
+      displayTitleSource && subjectCn === displayTitleSource.ascii && displayTitleSource.unicode !== displayTitleSource.ascii
+        ? displayTitleSource.unicode
+        : subjectCn;
+    const dnsNames = limitedDnsNames
+      .filter((entry, index) => index > 0 || entry.ascii !== anomaly.subject_cn)
+      .map(({ ascii, unicode }) => {
+        if (unicode && unicode !== ascii) {
           return `
             <div class="dns-name-row">
-              <span class="dns-ascii">${name}</span>
-              <span class="dns-unicode">${unicodeName}</span>
+              <span class="dns-ascii">${ascii}</span>
+              <span class="dns-unicode">${unicode}</span>
             </div>
           `;
         }
         return `
           <div class="dns-name-row">
-            <span class="dns-ascii">${name}</span>
+            <span class="dns-ascii">${ascii}</span>
           </div>
         `;
       })
       .join("");
     card.innerHTML = `
       <div class="anomaly-head">
-        <div>
-          <p class="cert-hash">${anomaly.cert_hash}</p>
-          <h3>${anomaly.subject_cn || "No subject CN"}</h3>
+        <div class="anomaly-copy">
+          <h3>${titleText}</h3>
           <div class="dns-sample">${dnsNames || '<div class="dns-name-row"><span class="dns-ascii">No DNS names</span></div>'}</div>
         </div>
         <div class="score-pill">${anomaly.anomaly_score}</div>
@@ -297,7 +352,7 @@ async function refreshDashboard() {
     renderMetricCards(stats.aggregated_counts);
     renderMiniStats(els.validityStats, profile.validity_days);
     renderMiniStats(els.sanStats, profile.san_count);
-    renderRateList(els.featureRates, profile.feature_rates);
+    renderIssuanceTemplates(profile);
     renderRankList(els.sigAlgList, profile.top_signature_algorithms);
     renderRankList(els.keyTypeList, profile.top_key_types);
     renderRankList(els.ekuList, profile.top_eku_sets);
