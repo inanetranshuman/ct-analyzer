@@ -81,6 +81,9 @@ docker compose up -d rollup
 - `GET /health`
 - `GET /stats/issuer/godaddy?days=30`
 - `GET /anomalies/issuer/godaddy?days=7&limit=50`
+- `GET /certificates/{cert_hash}`
+- `GET /certificates/search?...`
+- `GET /domains/{registered_domain}/activity?days=7&limit=25`
 
 The same `python -m ct_analyzer api` process also mounts a Streamable HTTP MCP endpoint at `http://localhost:8000/mcp`.
 
@@ -88,6 +91,9 @@ Available MCP tools:
 
 - `get_issuer_stats(days=30)`
 - `get_anomalies(days=7, limit=50)`
+- `get_certificate(cert_hash)`
+- `search_recent_certificates(...)`
+- `get_domain_activity(registered_domain, days=7, limit=25)`
 
 `run_rollup` is disabled by default on the MCP surface. Enable it only for trusted admin deployments with `MCP_ENABLE_ADMIN_TOOLS=true`.
 
@@ -95,6 +101,8 @@ Available MCP resources:
 
 - `ct://issuer/godaddy/stats/{days}`
 - `ct://issuer/godaddy/anomalies/{days}/{limit}`
+- `ct://certificate/{cert_hash}`
+- `ct://domain/{registered_domain}/activity/{days}/{limit}`
 
 For desktop-style stdio MCP clients, run:
 
@@ -118,6 +126,12 @@ Example anomaly response fields:
 - `top_signals`
 - `evidence`
 - `finding_severity_counts`
+
+Additional investigation endpoints expose bounded raw detail for drill-down and pivoting without exposing arbitrary SQL:
+
+- certificate lookup by `cert_hash`
+- recent certificate search with bounded filters and limits
+- recent activity for one registered domain
 
 ## Configuration
 

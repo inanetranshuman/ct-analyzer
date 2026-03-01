@@ -40,6 +40,30 @@ class IssuerAnomaliesResponse(BaseModel):
     top_anomalies: list[AnomalyRecordResponse]
 
 
+class CertificateDetailResponse(BaseModel):
+    cert_hash: str
+    subject_cn: str
+    subject_dn: str
+    issuer_cn: str
+    issuer_dn: str
+    serial_number: str
+    dns_names: list[str]
+    anomaly_score: int
+    findings: list[dict[str, Any]]
+
+
+class CertificateSearchResponse(BaseModel):
+    days: int
+    limit: int
+    results: list[dict[str, Any]]
+
+
+class DomainActivityResponse(BaseModel):
+    registered_domain: str
+    days: int
+    activity: list[dict[str, Any]]
+
+
 def build_router(
     get_repository: Callable[[], ClickHouseRepository],
     settings: Settings,
@@ -82,5 +106,55 @@ def build_router(
             aggregated_counts={key: value for key, value in stats.items() if key != "days"},
             top_anomalies=[AnomalyRecordResponse(**row) for row in anomalies],
         )
+
+    @router.get("/certificates/search", response_model=CertificateSearchResponse)
+    async def search_certificates(
+        days: int = Query(default=7, ge=1, le=30),
+        limit: int = Query(default=25, ge=1, le=100),
+        registered_domain: str | None = Query(default=None),
+        subject_cn_contains: str | None = Query(default=None),
+        issuer_contains: str | None = Query(default=None),
+        has_wildcard: bool | None = Query(default=None),
+        has_punycode: bool | None = Query(default=None),
+        min_anomaly_score: int | None = Query(default=None, ge=0, le=100),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> CertificateSearchResponse:
+        results = await asyncio.to_thread(
+            repository.search_recent_certificates,
+            days=days,
+            limit=limit,
+            registered_domain=registered_domain,
+            subject_cn_contains=subject_cn_contains,
+            issuer_contains=issuer_contains,
+            has_wildcard=has_wildcard,
+            has_punycode=has_punycode,
+            min_anomaly_score=min_anomaly_score,
+        )
+        return CertificateSearchResponse(days=days, limit=limit, results=results)
+
+    @router.get("/certificates/{cert_hash}", response_model=CertificateDetailResponse)
+    async def certificate_details(
+        cert_hash: str,
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> CertificateDetailResponse:
+        details = await asyncio.to_thread(repository.get_certificate_details, cert_hash)
+        if details is None:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=404, detail="Certificate not found")
+        return CertificateDetailResponse(**details)
+
+    @router.get("/domains/{registered_domain}/activity", response_model=DomainActivityResponse)
+    async def domain_activity(
+        registered_domain: str,
+        days: int = Query(default=7, ge=1, le=30),
+        limit: int = Query(default=25, ge=1, le=100),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> DomainActivityResponse:
+        payload = await asyncio.to_thread(repository.get_domain_activity, registered_domain, days, limit)
+        return DomainActivityResponse(**payload)
 
     return router

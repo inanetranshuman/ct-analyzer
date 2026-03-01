@@ -41,6 +41,47 @@ def _issuer_anomalies_payload(
     }
 
 
+def _certificate_details_payload(repository: ClickHouseRepository, cert_hash: str) -> dict[str, Any] | None:
+    return repository.get_certificate_details(cert_hash)
+
+
+def _certificate_search_payload(
+    repository: ClickHouseRepository,
+    *,
+    days: int,
+    limit: int,
+    registered_domain: str | None = None,
+    subject_cn_contains: str | None = None,
+    issuer_contains: str | None = None,
+    has_wildcard: bool | None = None,
+    has_punycode: bool | None = None,
+    min_anomaly_score: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "days": days,
+        "limit": limit,
+        "results": repository.search_recent_certificates(
+            days=days,
+            limit=limit,
+            registered_domain=registered_domain,
+            subject_cn_contains=subject_cn_contains,
+            issuer_contains=issuer_contains,
+            has_wildcard=has_wildcard,
+            has_punycode=has_punycode,
+            min_anomaly_score=min_anomaly_score,
+        ),
+    }
+
+
+def _domain_activity_payload(
+    repository: ClickHouseRepository,
+    registered_domain: str,
+    days: int,
+    limit: int,
+) -> dict[str, Any]:
+    return repository.get_domain_activity(registered_domain, days, limit)
+
+
 def _load_fastmcp() -> tuple[Any | None, type[Exception] | None]:
     try:
         from mcp.server.fastmcp import FastMCP
@@ -87,6 +128,48 @@ def create_mcp_server(
         repository = get_repository()
         return await asyncio.to_thread(_issuer_anomalies_payload, repository, days, limit)
 
+    @mcp.tool()
+    async def get_certificate(cert_hash: str) -> dict[str, Any]:
+        """Return a single certificate record plus findings by certificate hash."""
+        repository = get_repository()
+        payload = await asyncio.to_thread(_certificate_details_payload, repository, cert_hash)
+        if payload is None:
+            return {"cert_hash": cert_hash, "found": False}
+        payload["found"] = True
+        return payload
+
+    @mcp.tool()
+    async def search_recent_certificates(
+        days: int = 7,
+        limit: int = 25,
+        registered_domain: str | None = None,
+        subject_cn_contains: str | None = None,
+        issuer_contains: str | None = None,
+        has_wildcard: bool | None = None,
+        has_punycode: bool | None = None,
+        min_anomaly_score: int | None = None,
+    ) -> dict[str, Any]:
+        """Search recent certificates with bounded filters for investigation pivots."""
+        repository = get_repository()
+        return await asyncio.to_thread(
+            _certificate_search_payload,
+            repository,
+            days=days,
+            limit=limit,
+            registered_domain=registered_domain,
+            subject_cn_contains=subject_cn_contains,
+            issuer_contains=issuer_contains,
+            has_wildcard=has_wildcard,
+            has_punycode=has_punycode,
+            min_anomaly_score=min_anomaly_score,
+        )
+
+    @mcp.tool()
+    async def get_domain_activity(registered_domain: str, days: int = 7, limit: int = 25) -> dict[str, Any]:
+        """Return recent activity for one registered domain."""
+        repository = get_repository()
+        return await asyncio.to_thread(_domain_activity_payload, repository, registered_domain, days, limit)
+
     if settings.mcp.enable_admin_tools:
 
         @mcp.tool()
@@ -108,6 +191,20 @@ def create_mcp_server(
         """Read-only JSON snapshot of current anomaly results."""
         repository = get_repository()
         payload = await asyncio.to_thread(_issuer_anomalies_payload, repository, days, limit)
+        return json.dumps(payload, indent=2, sort_keys=True)
+
+    @mcp.resource("ct://certificate/{cert_hash}")
+    async def certificate_resource(cert_hash: str) -> str:
+        """Read-only JSON snapshot of one certificate and its findings."""
+        repository = get_repository()
+        payload = await asyncio.to_thread(_certificate_details_payload, repository, cert_hash)
+        return json.dumps(payload or {"cert_hash": cert_hash, "found": False}, indent=2, sort_keys=True)
+
+    @mcp.resource("ct://domain/{registered_domain}/activity/{days}/{limit}")
+    async def domain_activity_resource(registered_domain: str, days: int, limit: int) -> str:
+        """Read-only JSON snapshot of recent activity for one registered domain."""
+        repository = get_repository()
+        payload = await asyncio.to_thread(_domain_activity_payload, repository, registered_domain, days, limit)
         return json.dumps(payload, indent=2, sort_keys=True)
 
     @mcp.prompt()
