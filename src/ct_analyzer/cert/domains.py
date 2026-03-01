@@ -2,12 +2,69 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from functools import lru_cache
 
 from publicsuffix2 import PublicSuffixList
 
 
 DOMAIN_LABEL_RE = re.compile(r"[a-z0-9-]+")
+COMBINING_MARK_RE = re.compile(r"[\u0300-\u036f]")
+ASCII_ALNUM_RE = re.compile(r"[a-z0-9]")
+
+CONFUSABLE_CHAR_MAP = {
+    "а": "a",
+    "е": "e",
+    "о": "o",
+    "р": "p",
+    "с": "c",
+    "у": "y",
+    "х": "x",
+    "і": "i",
+    "ј": "j",
+    "ѕ": "s",
+    "ԁ": "d",
+    "ԛ": "q",
+    "գ": "g",
+    "α": "a",
+    "β": "b",
+    "γ": "y",
+    "δ": "d",
+    "ι": "i",
+    "κ": "k",
+    "ν": "v",
+    "ο": "o",
+    "ρ": "p",
+    "τ": "t",
+    "υ": "u",
+    "χ": "x",
+    "ø": "o",
+    "ö": "o",
+    "ó": "o",
+    "ò": "o",
+    "ô": "o",
+    "õ": "o",
+    "ä": "a",
+    "á": "a",
+    "à": "a",
+    "â": "a",
+    "ã": "a",
+    "å": "a",
+    "ë": "e",
+    "é": "e",
+    "è": "e",
+    "ê": "e",
+    "ï": "i",
+    "í": "i",
+    "ì": "i",
+    "î": "i",
+    "ü": "u",
+    "ú": "u",
+    "ù": "u",
+    "û": "u",
+    "ñ": "n",
+    "ç": "c",
+}
 
 
 @lru_cache(maxsize=1)
@@ -55,6 +112,71 @@ def to_unicode_hostname(hostname: str) -> str:
     except UnicodeError:
         decoded = value
     return f"*.{decoded}" if wildcard else decoded
+
+
+def _label_script(char: str) -> str | None:
+    if char.isascii():
+        if char.isalpha():
+            return "latin"
+        if char.isdigit():
+            return "digit"
+        return None
+    try:
+        name = unicodedata.name(char)
+    except ValueError:
+        return "other"
+    if "LATIN" in name:
+        return "latin"
+    if "CYRILLIC" in name:
+        return "cyrillic"
+    if "GREEK" in name:
+        return "greek"
+    return "other"
+
+
+def confusable_skeleton(value: str) -> str:
+    lowered = value.lower()
+    normalized = unicodedata.normalize("NFKD", lowered)
+    without_marks = COMBINING_MARK_RE.sub("", normalized)
+    return "".join(CONFUSABLE_CHAR_MAP.get(char, char) for char in without_marks)
+
+
+def idn_confusable_evidence(hostname: str) -> dict[str, object] | None:
+    unicode_hostname = to_unicode_hostname(hostname)
+    if not unicode_hostname or unicode_hostname == normalize_hostname(hostname):
+        return None
+
+    labels = [label for label in unicode_hostname.lstrip("*.").split(".") if label]
+    matches: list[dict[str, object]] = []
+    for label in labels:
+        if label.isascii():
+            continue
+        scripts = {
+            script
+            for char in label
+            if (script := _label_script(char)) not in {None, "digit"}
+        }
+        skeleton = confusable_skeleton(label)
+        mixed_script = len(scripts) > 1
+        ascii_blend = bool(ASCII_ALNUM_RE.search(label)) and any(ord(char) > 127 for char in label)
+        ascii_lookalike = skeleton.isascii() and skeleton != label.lower()
+        if mixed_script or ascii_blend or ascii_lookalike:
+            matches.append(
+                {
+                    "label": label,
+                    "skeleton": skeleton,
+                    "scripts": sorted(scripts),
+                    "mixed_script": mixed_script,
+                }
+            )
+
+    if not matches:
+        return None
+    return {
+        "hostname": normalize_hostname(hostname),
+        "unicode_hostname": unicode_hostname,
+        "matches": matches,
+    }
 
 
 def shannon_entropy(value: str) -> float:

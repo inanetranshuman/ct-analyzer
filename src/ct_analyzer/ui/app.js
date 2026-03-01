@@ -8,8 +8,10 @@ const state = {
 const SIGNAL_DESCRIPTIONS = {
   high_san_count: "This certificate has an unusually large number of SAN entries compared with normal leaf certificates.",
   wildcard_san: "The certificate covers one or more wildcard names such as *.example.com.",
-  punycode_san: "One or more SAN entries are encoded in punycode, which is commonly used for internationalized domain names and can also hide lookalike domains.",
+  punycode_san: "One or more SAN entries are encoded in punycode. This is common for legitimate internationalized domains, so by itself it is only a weak contextual signal.",
+  punycode_entropy_combo: "The certificate combines punycode with a high-entropy label, which is more suspicious than punycode alone and can indicate deceptive or algorithmic naming.",
   high_entropy_label: "A label in the SAN list has unusually high character entropy, which can indicate algorithmically generated or deceptive hostnames.",
+  idn_confusable: "The internationalized domain name appears to collapse into a plausible ASCII lookalike or mixes scripts in a way that can mislead a reader.",
   suspicious_keywords: "The SAN list contains words often associated with phishing or impersonation flows, such as login or billing.",
   validity_outlier: "The certificate validity period is longer than the issuer's recent baseline.",
   validity_long: "The certificate validity period is long enough to stand out even without a baseline comparison.",

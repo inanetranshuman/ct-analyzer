@@ -81,6 +81,7 @@ class AnomalyWeights(BaseModel):
     high_san: int = 20
     wildcard: int = 8
     punycode: int = 15
+    idn_confusable: int = 14
     entropy: int = 18
     keyword: int = 6
     validity: int = 12
@@ -189,6 +190,7 @@ class Settings(BaseModel):
                 high_san=_env_int("ANOMALY_WEIGHT_HIGH_SAN", 20),
                 wildcard=_env_int("ANOMALY_WEIGHT_WILDCARD", 8),
                 punycode=_env_int("ANOMALY_WEIGHT_PUNYCODE", 15),
+                idn_confusable=_env_int("ANOMALY_WEIGHT_IDN_CONFUSABLE", 14),
                 entropy=_env_int("ANOMALY_WEIGHT_ENTROPY", 18),
                 keyword=_env_int("ANOMALY_WEIGHT_KEYWORD", 6),
                 validity=_env_int("ANOMALY_WEIGHT_VALIDITY", 12),

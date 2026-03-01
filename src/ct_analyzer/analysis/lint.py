@@ -4,6 +4,7 @@ import json
 import re
 from datetime import UTC, datetime
 
+from ct_analyzer.cert.domains import idn_confusable_evidence
 from ct_analyzer.cert.x509_features import CertificateMetadata, FindingRecord
 from ct_analyzer.config import Settings
 
@@ -67,5 +68,11 @@ def lint_certificate(metadata: CertificateMetadata, settings: Settings) -> list[
 
     if not metadata.aia_ocsp_urls:
         add("AIA_OCSP_MISSING", "info", {})
+
+    for dns_name in metadata.dns_names[:10]:
+        evidence = idn_confusable_evidence(dns_name)
+        if evidence is not None:
+            add("IDN_CONFUSABLE", "medium", evidence)
+            break
 
     return findings

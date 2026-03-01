@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from ct_analyzer.analysis.baseline import IssuerBaseline
 from ct_analyzer.analysis.scoring import score_signals
-from ct_analyzer.cert.domains import contains_suspicious_keyword, highest_label_entropy
+from ct_analyzer.cert.domains import contains_suspicious_keyword, highest_label_entropy, idn_confusable_evidence
 from ct_analyzer.cert.x509_features import CertificateMetadata, FindingRecord, Signal
 from ct_analyzer.config import Settings
 
@@ -35,12 +35,6 @@ def analyze_certificate(
             Signal(code="wildcard_san", severity=severity, score=weights.wildcard, evidence={"dns_names": metadata.dns_names[:5]})
         )
 
-    if metadata.has_punycode:
-        severity = "medium" if (baseline and baseline.punycode_rate < thresholds.punycode_baseline_rate) else "info"
-        signals.append(
-            Signal(code="punycode_san", severity=severity, score=weights.punycode, evidence={"dns_names": metadata.dns_names[:5]})
-        )
-
     entropy_matches = []
     for san in metadata.dns_names:
         entropy = highest_label_entropy(san)
@@ -55,6 +49,49 @@ def analyze_certificate(
                 evidence={"matches": entropy_matches[:5], "threshold": thresholds.high_entropy_threshold},
             )
         )
+
+    confusable_matches = []
+    for san in metadata.dns_names[:10]:
+        evidence = idn_confusable_evidence(san)
+        if evidence is not None:
+            confusable_matches.append(evidence)
+    if confusable_matches:
+        signals.append(
+            Signal(
+                code="idn_confusable",
+                severity="medium",
+                score=weights.idn_confusable,
+                evidence={"matches": confusable_matches[:5]},
+            )
+        )
+
+    if metadata.has_punycode:
+        # Punycode alone is common for legitimate IDNs, so keep the standalone signal weak.
+        standalone_score = max(2, weights.punycode // 4)
+        severity = "info"
+        if baseline and baseline.punycode_rate < thresholds.punycode_baseline_rate:
+            severity = "low"
+        signals.append(
+            Signal(
+                code="punycode_san",
+                severity=severity,
+                score=standalone_score,
+                evidence={"dns_names": metadata.dns_names[:5]},
+            )
+        )
+        if entropy_matches:
+            signals.append(
+                Signal(
+                    code="punycode_entropy_combo",
+                    severity="medium",
+                    score=max(weights.punycode, weights.entropy),
+                    evidence={
+                        "dns_names": metadata.dns_names[:5],
+                        "matches": entropy_matches[:5],
+                        "threshold": thresholds.high_entropy_threshold,
+                    },
+                )
+            )
 
     keywords = sorted({kw for san in metadata.dns_names for kw in contains_suspicious_keyword(san, thresholds.suspicious_keywords)})
     if keywords:
