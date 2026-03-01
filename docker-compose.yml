@@ -1,0 +1,64 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-ct_analyzer}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+
+  certstream:
+    image: 0rickyy0/certstream-server-go:latest
+    ports:
+      - "8080:8080"
+
+  api:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+    depends_on:
+      - clickhouse
+    command: ["python", "-m", "ct_analyzer", "api"]
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  ingest:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CERTSTREAM_URL: ws://certstream:8080/full-stream
+    depends_on:
+      - clickhouse
+      - certstream
+    command: ["python", "-m", "ct_analyzer", "ingest"]
+
+  rollup:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+    depends_on:
+      - clickhouse
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        while true; do
+          python -m ct_analyzer rollup --days "${WINDOW_DAYS:-30}";
+          sleep "${ROLLUP_INTERVAL_SECONDS:-1800}";
+        done
+
+volumes:
+  clickhouse-data:

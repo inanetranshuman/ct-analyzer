@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ct-analyzer"
+version = "0.1.0"
+description = "Certificate Transparency analyzer for GoDaddy and Starfield issued leaf certificates."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "clickhouse-connect>=0.8.0",
+  "cryptography>=44.0.0",
+  "fastapi>=0.116.0",
+  "mcp[cli]>=1.0,<2.0",
+  "publicsuffix2>=2.20191221",
+  "pydantic>=2.10.0",
+  "python-dotenv>=1.0.1",
+  "uvicorn>=0.34.0",
+  "websockets>=15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+]
+
+[project.scripts]
+ct-analyzer = "ct_analyzer.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ct_analyzer = ["db/schema.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
