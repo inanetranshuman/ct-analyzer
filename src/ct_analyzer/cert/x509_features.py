@@ -156,7 +156,12 @@ def _extract_eku(cert: x509.Certificate) -> list[str]:
         return []
     values = []
     for oid in extension.value:
-        values.append(EKU_LABELS.get(oid.dotted_string, oid._name or oid.dotted_string))
+        label = EKU_LABELS.get(oid.dotted_string)
+        if label:
+            values.append(label)
+            continue
+        name = getattr(oid, "_name", None)
+        values.append(oid.dotted_string if not name or name == "Unknown OID" else name)
     return values
 
 

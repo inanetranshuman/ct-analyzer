@@ -552,6 +552,7 @@ class ClickHouseRepository:
         registered_domain: str | None = None,
         subject_cn_contains: str | None = None,
         issuer_contains: str | None = None,
+        eku_contains: str | None = None,
         has_wildcard: bool | None = None,
         has_punycode: bool | None = None,
         min_anomaly_score: int | None = None,
@@ -568,6 +569,11 @@ class ClickHouseRepository:
         if issuer_contains:
             where_clauses.append("positionCaseInsensitive(c.issuer_dn, %(issuer_contains)s) > 0")
             parameters["issuer_contains"] = issuer_contains
+        if eku_contains:
+            where_clauses.append(
+                "arrayExists(eku_value -> positionCaseInsensitive(eku_value, %(eku_contains)s) > 0, c.eku)"
+            )
+            parameters["eku_contains"] = eku_contains
         if has_wildcard is not None:
             where_clauses.append("c.has_wildcard = %(has_wildcard)s")
             parameters["has_wildcard"] = int(has_wildcard)
@@ -585,6 +591,7 @@ class ClickHouseRepository:
                 c.subject_cn,
                 c.issuer_dn,
                 c.dns_names,
+                c.eku,
                 c.has_wildcard,
                 c.has_punycode,
                 c.anomaly_score,
@@ -599,6 +606,7 @@ class ClickHouseRepository:
                 c.subject_cn,
                 c.issuer_dn,
                 c.dns_names,
+                c.eku,
                 c.has_wildcard,
                 c.has_punycode,
                 c.anomaly_score
@@ -613,6 +621,7 @@ class ClickHouseRepository:
                 "subject_cn": subject_cn,
                 "issuer_dn": issuer_dn,
                 "dns_names": list(dns_names)[:10],
+                "eku": list(eku_values),
                 "has_wildcard": bool(has_wildcard_value),
                 "has_punycode": bool(has_punycode_value),
                 "anomaly_score": int(anomaly_score),
@@ -624,6 +633,7 @@ class ClickHouseRepository:
                 subject_cn,
                 issuer_dn,
                 dns_names,
+                eku_values,
                 has_wildcard_value,
                 has_punycode_value,
                 anomaly_score,

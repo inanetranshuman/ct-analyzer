@@ -70,6 +70,7 @@ class CertificateDetailResponse(BaseModel):
     issuer_dn: str
     serial_number: str
     dns_names: list[str]
+    eku: list[str]
     anomaly_score: int
     findings: list[dict[str, Any]]
 
@@ -159,6 +160,7 @@ def build_router(
         registered_domain: str | None = Query(default=None),
         subject_cn_contains: str | None = Query(default=None),
         issuer_contains: str | None = Query(default=None),
+        eku_contains: str | None = Query(default=None),
         has_wildcard: bool | None = Query(default=None),
         has_punycode: bool | None = Query(default=None),
         min_anomaly_score: int | None = Query(default=None, ge=0, le=100),
@@ -172,6 +174,7 @@ def build_router(
             registered_domain=registered_domain,
             subject_cn_contains=subject_cn_contains,
             issuer_contains=issuer_contains,
+            eku_contains=eku_contains,
             has_wildcard=has_wildcard,
             has_punycode=has_punycode,
             min_anomaly_score=min_anomaly_score,
