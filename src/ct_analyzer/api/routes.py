@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 from collections.abc import Callable
 from typing import Any
 
@@ -24,7 +25,9 @@ class IssuerStatsResponse(BaseModel):
 
 class IssuerProfileResponse(BaseModel):
     issuer: str
-    days: int
+    days: int | None = None
+    date_from: str | None = None
+    date_to: str | None = None
     cert_count: int
     validity_days: dict[str, float]
     san_count: dict[str, float]
@@ -37,7 +40,9 @@ class IssuerProfileResponse(BaseModel):
 
 class IssuerBreakdownResponse(BaseModel):
     issuer: str
-    days: int
+    days: int | None = None
+    date_from: str | None = None
+    date_to: str | None = None
     group_by: str
     label: str
     buckets: list[dict[str, Any]]
@@ -56,10 +61,34 @@ class AnomalyRecordResponse(BaseModel):
 
 class IssuerAnomaliesResponse(BaseModel):
     issuer: str
-    days: int
+    days: int | None = None
+    date_from: str | None = None
+    date_to: str | None = None
     limit: int
     aggregated_counts: dict[str, int]
     top_anomalies: list[AnomalyRecordResponse]
+
+
+class IssuerStatsRangeResponse(BaseModel):
+    issuer: str
+    date_from: str
+    date_to: str
+    aggregated_counts: dict[str, int]
+
+
+class DailyIssuerCountsResponse(BaseModel):
+    issuer: str
+    date_from: str
+    date_to: str
+    daily_counts: list[dict[str, Any]]
+
+
+class FindingsSummaryResponse(BaseModel):
+    issuer: str
+    date_from: str
+    date_to: str
+    severity_totals: dict[str, int]
+    findings: list[dict[str, Any]]
 
 
 class CertificateDetailResponse(BaseModel):
@@ -113,6 +142,16 @@ def build_router(
             aggregated_counts={key: value for key, value in stats.items() if key != "days"},
         )
 
+    @router.get("/reports/issuer/godaddy/stats-range", response_model=IssuerStatsRangeResponse)
+    async def issuer_stats_range(
+        date_from: date = Query(...),
+        date_to: date = Query(...),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> IssuerStatsRangeResponse:
+        payload = await asyncio.to_thread(repository.query_issuer_stats_range, date_from, date_to)
+        return IssuerStatsRangeResponse(**payload)
+
     @router.get("/profile/issuer/godaddy", response_model=IssuerProfileResponse)
     async def issuer_profile(
         days: int = Query(default=30, ge=1, le=365),
@@ -120,6 +159,16 @@ def build_router(
         repository: ClickHouseRepository = Depends(get_repository),
     ) -> IssuerProfileResponse:
         profile = await asyncio.to_thread(repository.query_issuer_profile, days)
+        return IssuerProfileResponse(**profile)
+
+    @router.get("/reports/issuer/godaddy/profile-range", response_model=IssuerProfileResponse)
+    async def issuer_profile_range(
+        date_from: date = Query(...),
+        date_to: date = Query(...),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> IssuerProfileResponse:
+        profile = await asyncio.to_thread(repository.query_issuer_profile_range, date_from, date_to)
         return IssuerProfileResponse(**profile)
 
     @router.get("/breakdown/issuer/godaddy", response_model=IssuerBreakdownResponse)
@@ -136,6 +185,42 @@ def build_router(
         payload = await asyncio.to_thread(repository.query_issuer_breakdown, group_by, days, limit)
         return IssuerBreakdownResponse(**payload)
 
+    @router.get("/reports/issuer/godaddy/breakdown-range", response_model=IssuerBreakdownResponse)
+    async def issuer_breakdown_range(
+        group_by: str = Query(
+            default="sig_alg",
+            pattern="^(issuer_cn|issuer_dn|sig_alg|key_type|key_size|eku_set|finding_code|severity|anomaly_bucket|registered_domain|validity_bucket|san_count_bucket)$",
+        ),
+        date_from: date = Query(...),
+        date_to: date = Query(...),
+        limit: int = Query(default=10, ge=1, le=100),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> IssuerBreakdownResponse:
+        payload = await asyncio.to_thread(repository.query_issuer_breakdown_range, group_by, date_from, date_to, limit)
+        return IssuerBreakdownResponse(**payload)
+
+    @router.get("/reports/issuer/godaddy/daily-counts", response_model=DailyIssuerCountsResponse)
+    async def issuer_daily_counts(
+        date_from: date = Query(...),
+        date_to: date = Query(...),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> DailyIssuerCountsResponse:
+        payload = await asyncio.to_thread(repository.query_issuer_daily_counts, date_from, date_to)
+        return DailyIssuerCountsResponse(**payload)
+
+    @router.get("/reports/issuer/godaddy/findings-summary", response_model=FindingsSummaryResponse)
+    async def findings_summary(
+        date_from: date = Query(...),
+        date_to: date = Query(...),
+        limit: int = Query(default=25, ge=1, le=200),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> FindingsSummaryResponse:
+        payload = await asyncio.to_thread(repository.query_findings_summary_range, date_from, date_to, limit)
+        return FindingsSummaryResponse(**payload)
+
     @router.get("/anomalies/issuer/godaddy", response_model=IssuerAnomaliesResponse)
     async def issuer_anomalies(
         days: int = Query(default=7, ge=1, le=365),
@@ -150,6 +235,25 @@ def build_router(
             days=days,
             limit=limit,
             aggregated_counts={key: value for key, value in stats.items() if key != "days"},
+            top_anomalies=[AnomalyRecordResponse(**row) for row in anomalies],
+        )
+
+    @router.get("/reports/issuer/godaddy/anomalies-range", response_model=IssuerAnomaliesResponse)
+    async def issuer_anomalies_range(
+        date_from: date = Query(...),
+        date_to: date = Query(...),
+        limit: int = Query(default=50, ge=1, le=200),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> IssuerAnomaliesResponse:
+        stats = await asyncio.to_thread(repository.query_issuer_stats_range, date_from, date_to)
+        anomalies = await asyncio.to_thread(repository.query_anomalies_range, date_from, date_to, limit)
+        return IssuerAnomaliesResponse(
+            issuer="godaddy",
+            date_from=date_from.isoformat(),
+            date_to=date_to.isoformat(),
+            limit=limit,
+            aggregated_counts=stats["aggregated_counts"],
             top_anomalies=[AnomalyRecordResponse(**row) for row in anomalies],
         )
 

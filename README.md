@@ -89,8 +89,14 @@ docker compose up -d rollup
 - `GET /health`
 - `GET /stats/issuer/godaddy?days=30`
 - `GET /profile/issuer/godaddy?days=30`
+- `GET /reports/issuer/godaddy/stats-range?date_from=2026-03-02&date_to=2026-03-08`
+- `GET /reports/issuer/godaddy/profile-range?date_from=2026-03-02&date_to=2026-03-08`
+- `GET /reports/issuer/godaddy/daily-counts?date_from=2026-03-02&date_to=2026-03-08`
+- `GET /reports/issuer/godaddy/findings-summary?date_from=2026-03-02&date_to=2026-03-08&limit=25`
 - `GET /breakdown/issuer/godaddy?group_by=sig_alg&days=30&limit=10`
+- `GET /reports/issuer/godaddy/breakdown-range?group_by=sig_alg&date_from=2026-03-02&date_to=2026-03-08&limit=10`
 - `GET /anomalies/issuer/godaddy?days=7&limit=50`
+- `GET /reports/issuer/godaddy/anomalies-range?date_from=2026-03-02&date_to=2026-03-08&limit=50`
 - `GET /certificates/{cert_hash}`
 - `GET /certificates/search?...` including bounded `eku_contains`, `finding_code`, and validity-range filtering
 - `GET /domains/{registered_domain}/activity?days=7&limit=25`
@@ -102,9 +108,15 @@ The same process now also serves a browser UI at `GET /`. The UI is read-only an
 Available MCP tools:
 
 - `get_issuer_stats(days=30)`
+- `get_issuer_stats_range(date_from, date_to)`
 - `get_issuer_profile(days=30)`
+- `get_issuer_profile_range(date_from, date_to)`
+- `get_issuer_daily_counts(date_from, date_to)`
+- `get_findings_summary(date_from, date_to, limit=25)`
 - `get_issuer_breakdown(group_by="sig_alg", days=30, limit=10)`
+- `get_issuer_breakdown_range(group_by="sig_alg", date_from, date_to, limit=10)`
 - `get_anomalies(days=7, limit=50)`
+- `get_anomalies_range(date_from, date_to, limit=50)`
 - `get_certificate(cert_hash)`
 - `search_recent_certificates(...)`
 - `get_domain_activity(registered_domain, days=7, limit=25)`
@@ -132,6 +144,8 @@ Examples:
   `claude mcp add --transport http ct-analyzer http://localhost:8000/mcp`
 - Claude Code stdio transport:
   `claude mcp add ct-analyzer python -m ct_analyzer mcp`
+
+For exact Monday-Sunday or arbitrary date-bounded reporting, prefer the `*_range` tools instead of the trailing `days=` tools.
 
 Example anomaly response fields:
 

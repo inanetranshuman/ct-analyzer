@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
+from datetime import date
 from typing import Any
 
 from mcp.server.transport_security import TransportSecuritySettings
@@ -14,6 +15,10 @@ from ct_analyzer.db.rollups import refresh_rollups
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _parse_iso_date(value: str) -> date:
+    return date.fromisoformat(value)
 
 
 def _issuer_stats_payload(repository: ClickHouseRepository, days: int) -> dict[str, Any]:
@@ -45,6 +50,39 @@ def _issuer_profile_payload(repository: ClickHouseRepository, days: int) -> dict
     return repository.query_issuer_profile(days)
 
 
+def _issuer_stats_range_payload(
+    repository: ClickHouseRepository,
+    date_from: str,
+    date_to: str,
+) -> dict[str, Any]:
+    return repository.query_issuer_stats_range(_parse_iso_date(date_from), _parse_iso_date(date_to))
+
+
+def _issuer_profile_range_payload(
+    repository: ClickHouseRepository,
+    date_from: str,
+    date_to: str,
+) -> dict[str, Any]:
+    return repository.query_issuer_profile_range(_parse_iso_date(date_from), _parse_iso_date(date_to))
+
+
+def _issuer_daily_counts_payload(
+    repository: ClickHouseRepository,
+    date_from: str,
+    date_to: str,
+) -> dict[str, Any]:
+    return repository.query_issuer_daily_counts(_parse_iso_date(date_from), _parse_iso_date(date_to))
+
+
+def _findings_summary_payload(
+    repository: ClickHouseRepository,
+    date_from: str,
+    date_to: str,
+    limit: int,
+) -> dict[str, Any]:
+    return repository.query_findings_summary_range(_parse_iso_date(date_from), _parse_iso_date(date_to), limit)
+
+
 def _issuer_breakdown_payload(
     repository: ClickHouseRepository,
     group_by: str,
@@ -54,8 +92,41 @@ def _issuer_breakdown_payload(
     return repository.query_issuer_breakdown(group_by, days, limit)
 
 
+def _issuer_breakdown_range_payload(
+    repository: ClickHouseRepository,
+    group_by: str,
+    date_from: str,
+    date_to: str,
+    limit: int,
+) -> dict[str, Any]:
+    return repository.query_issuer_breakdown_range(
+        group_by,
+        _parse_iso_date(date_from),
+        _parse_iso_date(date_to),
+        limit,
+    )
+
+
 def _certificate_details_payload(repository: ClickHouseRepository, cert_hash: str) -> dict[str, Any] | None:
     return repository.get_certificate_details(cert_hash)
+
+
+def _issuer_anomalies_range_payload(
+    repository: ClickHouseRepository,
+    date_from: str,
+    date_to: str,
+    limit: int,
+) -> dict[str, Any]:
+    stats = repository.query_issuer_stats_range(_parse_iso_date(date_from), _parse_iso_date(date_to))
+    anomalies = repository.query_anomalies_range(_parse_iso_date(date_from), _parse_iso_date(date_to), limit)
+    return {
+        "issuer": "godaddy",
+        "date_from": date_from,
+        "date_to": date_to,
+        "limit": limit,
+        "aggregated_counts": stats["aggregated_counts"],
+        "top_anomalies": anomalies,
+    }
 
 
 def _certificate_search_payload(
@@ -146,10 +217,22 @@ def create_mcp_server(
         return await asyncio.to_thread(_issuer_stats_payload, repository, days)
 
     @mcp.tool()
+    async def get_issuer_stats_range(date_from: str, date_to: str) -> dict[str, Any]:
+        """Return exact issuer counts for an inclusive ISO date range such as 2026-03-02 to 2026-03-08."""
+        repository = get_repository()
+        return await asyncio.to_thread(_issuer_stats_range_payload, repository, date_from, date_to)
+
+    @mcp.tool()
     async def get_anomalies(days: int = 7, limit: int = 50) -> dict[str, Any]:
         """Return top anomaly records for GoDaddy/Starfield certificates."""
         repository = get_repository()
         return await asyncio.to_thread(_issuer_anomalies_payload, repository, days, limit)
+
+    @mcp.tool()
+    async def get_anomalies_range(date_from: str, date_to: str, limit: int = 50) -> dict[str, Any]:
+        """Return top anomaly records for an inclusive ISO date range."""
+        repository = get_repository()
+        return await asyncio.to_thread(_issuer_anomalies_range_payload, repository, date_from, date_to, limit)
 
     @mcp.tool()
     async def get_issuer_profile(days: int = 30) -> dict[str, Any]:
@@ -158,10 +241,46 @@ def create_mcp_server(
         return await asyncio.to_thread(_issuer_profile_payload, repository, days)
 
     @mcp.tool()
+    async def get_issuer_profile_range(date_from: str, date_to: str) -> dict[str, Any]:
+        """Return the baseline X.509 profile for an inclusive ISO date range."""
+        repository = get_repository()
+        return await asyncio.to_thread(_issuer_profile_range_payload, repository, date_from, date_to)
+
+    @mcp.tool()
+    async def get_issuer_daily_counts(date_from: str, date_to: str) -> dict[str, Any]:
+        """Return daily issuer counts for an inclusive ISO date range."""
+        repository = get_repository()
+        return await asyncio.to_thread(_issuer_daily_counts_payload, repository, date_from, date_to)
+
+    @mcp.tool()
+    async def get_findings_summary(date_from: str, date_to: str, limit: int = 25) -> dict[str, Any]:
+        """Return top finding codes and severity totals for an inclusive ISO date range."""
+        repository = get_repository()
+        return await asyncio.to_thread(_findings_summary_payload, repository, date_from, date_to, limit)
+
+    @mcp.tool()
     async def get_issuer_breakdown(group_by: str = "sig_alg", days: int = 30, limit: int = 10) -> dict[str, Any]:
         """Return grouped GoDaddy/Starfield counts by a bounded set of useful dimensions."""
         repository = get_repository()
         return await asyncio.to_thread(_issuer_breakdown_payload, repository, group_by, days, limit)
+
+    @mcp.tool()
+    async def get_issuer_breakdown_range(
+        group_by: str = "sig_alg",
+        date_from: str = "",
+        date_to: str = "",
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        """Return grouped issuer counts for an inclusive ISO date range."""
+        repository = get_repository()
+        return await asyncio.to_thread(
+            _issuer_breakdown_range_payload,
+            repository,
+            group_by,
+            date_from,
+            date_to,
+            limit,
+        )
 
     @mcp.tool()
     async def get_certificate(cert_hash: str) -> dict[str, Any]:
