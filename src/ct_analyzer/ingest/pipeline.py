@@ -180,22 +180,31 @@ class IngestionPipeline:
             if len(batch_observations) >= self.settings.ingest.batch_size or (
                 batch_observations and queue.empty()
             ):
-                await asyncio.to_thread(self.repository.insert_certificates, batch_certs)
-                await asyncio.to_thread(self.repository.insert_observations, batch_observations)
-                await asyncio.to_thread(self.repository.insert_findings, batch_findings)
-                self.stats.flushed_certificates += len(batch_certs)
-                self.stats.flushed_observations += len(batch_observations)
-                self.stats.flushed_findings += len(batch_findings)
-                LOGGER.info(
-                    "Flushed %s certificates, %s observations, %s findings (totals: matched=%s filtered=%s errors=%s observations=%s)",
-                    len(batch_certs),
-                    len(batch_observations),
-                    len(batch_findings),
-                    self.stats.matched_events,
-                    self.stats.filtered_events,
-                    self.stats.processing_errors,
-                    self.stats.flushed_observations,
-                )
+                try:
+                    await asyncio.to_thread(self.repository.insert_certificates, batch_certs)
+                    await asyncio.to_thread(self.repository.insert_observations, batch_observations)
+                    await asyncio.to_thread(self.repository.insert_findings, batch_findings)
+                    self.stats.flushed_certificates += len(batch_certs)
+                    self.stats.flushed_observations += len(batch_observations)
+                    self.stats.flushed_findings += len(batch_findings)
+                    LOGGER.info(
+                        "Flushed %s certificates, %s observations, %s findings (totals: matched=%s filtered=%s errors=%s observations=%s)",
+                        len(batch_certs),
+                        len(batch_observations),
+                        len(batch_findings),
+                        self.stats.matched_events,
+                        self.stats.filtered_events,
+                        self.stats.processing_errors,
+                        self.stats.flushed_observations,
+                    )
+                except Exception:
+                    self.stats.processing_errors += 1
+                    LOGGER.exception(
+                        "Failed to flush ingest batch to ClickHouse; dropping batch with %s certificates, %s observations, %s findings",
+                        len(batch_certs),
+                        len(batch_observations),
+                        len(batch_findings),
+                    )
                 batch_certs.clear()
                 batch_observations.clear()
                 batch_findings.clear()

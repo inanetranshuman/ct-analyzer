@@ -66,7 +66,26 @@ class ClickHouseRepository:
             return
         columns = list(rows[0].keys())
         payload = [[row.get(column) for column in columns] for row in rows]
-        self.client.insert(self._qualified(table), payload, column_names=columns)
+        self._insert_payload(table, payload, columns)
+
+    def _insert_payload(self, table: str, payload: list[list[Any]], columns: list[str]) -> None:
+        try:
+            self.client.insert(self._qualified(table), payload, column_names=columns)
+        except Exception as exc:
+            message = str(exc)
+            if "MEMORY_LIMIT_EXCEEDED" in message and len(payload) > 1:
+                midpoint = len(payload) // 2
+                LOGGER.warning(
+                    "ClickHouse insert for %s exceeded memory with %s rows; retrying as %s + %s rows",
+                    table,
+                    len(payload),
+                    midpoint,
+                    len(payload) - midpoint,
+                )
+                self._insert_payload(table, payload[:midpoint], columns)
+                self._insert_payload(table, payload[midpoint:], columns)
+                return
+            raise
 
     def insert_certificates(self, rows: list[dict[str, Any]]) -> None:
         deduped: dict[str, dict[str, Any]] = {}
