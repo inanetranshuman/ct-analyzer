@@ -87,6 +87,15 @@ function clearNode(node) {
   }
 }
 
+function renderPanelError(node, message) {
+  clearNode(node);
+  const error = document.createElement("p");
+  error.className = "auth-status";
+  error.dataset.kind = "error";
+  error.textContent = message;
+  node.appendChild(error);
+}
+
 function renderMetricCards(counts) {
   clearNode(els.metricCards);
   for (const [label, value] of Object.entries(counts)) {
@@ -343,25 +352,84 @@ async function refreshDashboard() {
   setLoadingState(true);
   setAuthStatus("Loading data...", "neutral");
   try {
-    const [stats, profile, breakdown, anomalies] = await Promise.all([
+    const results = await Promise.allSettled([
       fetchJson(`/stats/issuer/godaddy?days=${state.days}`),
       fetchJson(`/profile/issuer/godaddy?days=${state.days}`),
       fetchJson(`/breakdown/issuer/godaddy?group_by=${encodeURIComponent(state.groupBy)}&days=${state.days}&limit=12`),
-      fetchJson(`/anomalies/issuer/godaddy?days=${Math.min(state.days, 30)}&limit=12`),
+      fetchJson(`/anomalies/issuer/godaddy?days=${Math.min(state.days, 14)}&limit=12`),
     ]);
-    renderMetricCards(stats.aggregated_counts);
-    renderMiniStats(els.validityStats, profile.validity_days);
-    renderMiniStats(els.sanStats, profile.san_count);
-    renderIssuanceTemplates(profile);
-    renderRankList(els.sigAlgList, profile.top_signature_algorithms);
-    renderRankList(els.keyTypeList, profile.top_key_types);
-    renderRankList(els.ekuList, profile.top_eku_sets);
-    renderBreakdown(breakdown);
-    renderAnomalies(anomalies);
-    setAuthStatus(
-      `Loaded ${numberFormat(profile.cert_count)} certificates for the selected window.`,
-      "success",
+    const [statsResult, profileResult, breakdownResult, anomaliesResult] = results;
+
+    const firstError = results.find(
+      (result) => result.status === "rejected" && String(result.reason?.message).includes("401"),
     );
+    if (firstError) {
+      setAuthStatus("Your session is not valid. Redirecting to sign-in.", "error");
+      window.setTimeout(() => {
+        window.location.href = "/login";
+      }, 500);
+      return;
+    }
+
+    let loadedSections = 0;
+    let failedSections = 0;
+
+    if (statsResult.status === "fulfilled") {
+      renderMetricCards(statsResult.value.aggregated_counts);
+      loadedSections += 1;
+    } else {
+      renderPanelError(els.metricCards, "Could not load issuance snapshot.");
+      failedSections += 1;
+    }
+
+    if (profileResult.status === "fulfilled") {
+      const profile = profileResult.value;
+      renderMiniStats(els.validityStats, profile.validity_days);
+      renderMiniStats(els.sanStats, profile.san_count);
+      renderIssuanceTemplates(profile);
+      renderRankList(els.sigAlgList, profile.top_signature_algorithms);
+      renderRankList(els.keyTypeList, profile.top_key_types);
+      renderRankList(els.ekuList, profile.top_eku_sets);
+      loadedSections += 1;
+    } else {
+      renderPanelError(els.validityStats, "Could not load issuer validity profile.");
+      renderPanelError(els.sanStats, "Could not load SAN profile.");
+      renderPanelError(els.issuanceTemplates, "Could not load issuance template patterns.");
+      renderPanelError(els.sigAlgList, "Could not load signature algorithm patterns.");
+      renderPanelError(els.keyTypeList, "Could not load key type patterns.");
+      renderPanelError(els.ekuList, "Could not load EKU patterns.");
+      failedSections += 1;
+    }
+
+    if (breakdownResult.status === "fulfilled") {
+      renderBreakdown(breakdownResult.value);
+      loadedSections += 1;
+    } else {
+      renderPanelError(els.breakdownTable, `Could not load ${state.groupBy} breakdown.`);
+      failedSections += 1;
+    }
+
+    if (anomaliesResult.status === "fulfilled") {
+      renderAnomalies(anomaliesResult.value);
+      loadedSections += 1;
+    } else {
+      renderPanelError(els.anomalyList, "Could not load suspicious certificates for this window.");
+      failedSections += 1;
+    }
+
+    if (failedSections === 0 && profileResult.status === "fulfilled") {
+      setAuthStatus(
+        `Loaded ${numberFormat(profileResult.value.cert_count)} certificates for the selected window.`,
+        "success",
+      );
+    } else if (loadedSections > 0) {
+      setAuthStatus(
+        `Loaded ${loadedSections} sections. ${failedSections} section${failedSections === 1 ? "" : "s"} could not be loaded.`,
+        "error",
+      );
+    } else {
+      throw new Error("All dashboard queries failed.");
+    }
   } catch (error) {
     console.error(error);
     if (String(error.message).includes("401")) {
