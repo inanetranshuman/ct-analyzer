@@ -36,7 +36,8 @@ class ClickHouseRepository:
 
     @staticmethod
     def _quoted_string_list(values: list[str]) -> str:
-        return ", ".join(json.dumps(value) for value in values)
+        escaped_values = [value.replace("'", "''") for value in values]
+        return ", ".join(f"'{value}'" for value in escaped_values)
 
     def _new_client(self):
         return clickhouse_connect.get_client(
@@ -343,24 +344,8 @@ class ClickHouseRepository:
                 avg(has_email_san) AS email_san_rate,
                 avg(has_must_staple) AS must_staple_rate,
                 avg(basic_constraints_ca) AS ca_true_rate
-            FROM
-            (
-                SELECT DISTINCT
-                    c.cert_hash,
-                    c.validity_days,
-                    c.san_count,
-                    c.has_wildcard,
-                    c.has_punycode,
-                    c.has_ip_san,
-                    c.has_uri_san,
-                    c.has_email_san,
-                    c.has_must_staple,
-                    c.basic_constraints_ca
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(cutoff)s
-            )
+            FROM {self._qualified("certificates")} FINAL
+            WHERE last_seen >= %(cutoff)s
             """,
             parameters={"cutoff": cutoff},
         ).first_row or (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -372,14 +357,8 @@ class ClickHouseRepository:
         top_sig_algs = _top_rows(
             f"""
             SELECT sig_alg, count() AS count
-            FROM
-            (
-                SELECT DISTINCT c.cert_hash, c.sig_alg
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(cutoff)s
-            )
+            FROM {self._qualified("certificates")} FINAL
+            WHERE last_seen >= %(cutoff)s
             GROUP BY sig_alg
             ORDER BY count DESC
             LIMIT 5
@@ -388,14 +367,8 @@ class ClickHouseRepository:
         top_key_types = _top_rows(
             f"""
             SELECT key_type, count() AS count
-            FROM
-            (
-                SELECT DISTINCT c.cert_hash, c.key_type
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(cutoff)s
-            )
+            FROM {self._qualified("certificates")} FINAL
+            WHERE last_seen >= %(cutoff)s
             GROUP BY key_type
             ORDER BY count DESC
             LIMIT 5
@@ -404,14 +377,8 @@ class ClickHouseRepository:
         top_key_sizes = _top_rows(
             f"""
             SELECT toString(key_size), count() AS count
-            FROM
-            (
-                SELECT DISTINCT c.cert_hash, c.key_size
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(cutoff)s
-            )
+            FROM {self._qualified("certificates")} FINAL
+            WHERE last_seen >= %(cutoff)s
             GROUP BY key_size
             ORDER BY count DESC
             LIMIT 5
@@ -424,13 +391,11 @@ class ClickHouseRepository:
                 count() AS count
             FROM
             (
-                SELECT DISTINCT
-                    c.cert_hash,
-                    if(length(c.eku) = 0, '(none)', arrayStringConcat(arraySort(c.eku), ',')) AS eku_set
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(cutoff)s
+                SELECT
+                    cert_hash,
+                    if(length(eku) = 0, '(none)', arrayStringConcat(arraySort(eku), ',')) AS eku_set
+                FROM {self._qualified("certificates")} FINAL
+                WHERE last_seen >= %(cutoff)s
             )
             GROUP BY eku_set
             ORDER BY count DESC
@@ -482,25 +447,9 @@ class ClickHouseRepository:
                 avg(has_email_san) AS email_san_rate,
                 avg(has_must_staple) AS must_staple_rate,
                 avg(basic_constraints_ca) AS ca_true_rate
-            FROM
-            (
-                SELECT DISTINCT
-                    c.cert_hash,
-                    c.validity_days,
-                    c.san_count,
-                    c.has_wildcard,
-                    c.has_punycode,
-                    c.has_ip_san,
-                    c.has_uri_san,
-                    c.has_email_san,
-                    c.has_must_staple,
-                    c.basic_constraints_ca
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(start)s
-                  AND o.seen_at < %(end)s
-            )
+            FROM {self._qualified("certificates")} FINAL
+            WHERE last_seen >= %(start)s
+              AND last_seen < %(end)s
             """,
             parameters={"start": start, "end": end},
         ).first_row or (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -512,15 +461,9 @@ class ClickHouseRepository:
         top_sig_algs = _top_rows(
             f"""
             SELECT sig_alg, count() AS count
-            FROM
-            (
-                SELECT DISTINCT c.cert_hash, c.sig_alg
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(start)s
-                  AND o.seen_at < %(end)s
-            )
+            FROM {self._qualified("certificates")} FINAL
+            WHERE last_seen >= %(start)s
+              AND last_seen < %(end)s
             GROUP BY sig_alg
             ORDER BY count DESC
             LIMIT 5
@@ -529,15 +472,9 @@ class ClickHouseRepository:
         top_key_types = _top_rows(
             f"""
             SELECT key_type, count() AS count
-            FROM
-            (
-                SELECT DISTINCT c.cert_hash, c.key_type
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(start)s
-                  AND o.seen_at < %(end)s
-            )
+            FROM {self._qualified("certificates")} FINAL
+            WHERE last_seen >= %(start)s
+              AND last_seen < %(end)s
             GROUP BY key_type
             ORDER BY count DESC
             LIMIT 5
@@ -546,15 +483,9 @@ class ClickHouseRepository:
         top_key_sizes = _top_rows(
             f"""
             SELECT toString(key_size), count() AS count
-            FROM
-            (
-                SELECT DISTINCT c.cert_hash, c.key_size
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(start)s
-                  AND o.seen_at < %(end)s
-            )
+            FROM {self._qualified("certificates")} FINAL
+            WHERE last_seen >= %(start)s
+              AND last_seen < %(end)s
             GROUP BY key_size
             ORDER BY count DESC
             LIMIT 5
@@ -567,14 +498,12 @@ class ClickHouseRepository:
                 count() AS count
             FROM
             (
-                SELECT DISTINCT
-                    c.cert_hash,
-                    if(length(c.eku) = 0, '(none)', arrayStringConcat(arraySort(c.eku), ',')) AS eku_set
-                FROM {self._qualified("observations")} AS o
-                INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                    ON c.cert_hash = o.cert_hash
-                WHERE o.seen_at >= %(start)s
-                  AND o.seen_at < %(end)s
+                SELECT
+                    cert_hash,
+                    if(length(eku) = 0, '(none)', arrayStringConcat(arraySort(eku), ',')) AS eku_set
+                FROM {self._qualified("certificates")} FINAL
+                WHERE last_seen >= %(start)s
+                  AND last_seen < %(end)s
             )
             GROUP BY eku_set
             ORDER BY count DESC
@@ -664,7 +593,7 @@ class ClickHouseRepository:
                 """,
                 parameters={"cutoff": cutoff, "limit": limit},
             ).result_rows
-        else:
+        elif group_by == "registered_domain":
             rows = self.client.query(
                 f"""
                 SELECT
@@ -673,12 +602,30 @@ class ClickHouseRepository:
                 FROM
                 (
                     SELECT DISTINCT
-                        c.cert_hash,
+                        cert_hash,
                         {expr} AS grouping_value
                     FROM {self._qualified("observations")} AS o
-                    INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                        ON c.cert_hash = o.cert_hash
                     WHERE o.seen_at >= %(cutoff)s
+                )
+                GROUP BY grouping_value
+                ORDER BY count DESC
+                LIMIT %(limit)s
+                """,
+                parameters={"cutoff": cutoff, "limit": limit},
+            ).result_rows
+        else:
+            rows = self.client.query(
+                f"""
+                SELECT
+                    grouping_value,
+                    count() AS count
+                FROM
+                (
+                    SELECT
+                        cert_hash,
+                        {expr} AS grouping_value
+                    FROM {self._qualified("certificates")} FINAL AS c
+                    WHERE c.last_seen >= %(cutoff)s
                 )
                 GROUP BY grouping_value
                 ORDER BY count DESC
@@ -759,20 +706,37 @@ class ClickHouseRepository:
                 """,
                 parameters={"start": start, "end": end, "limit": limit},
             ).result_rows
-        else:
+        elif group_by == "registered_domain":
             rows = self.client.query(
                 f"""
                 SELECT grouping_value, count() AS count
                 FROM
                 (
                     SELECT DISTINCT
-                        c.cert_hash,
+                        cert_hash,
                         {expr} AS grouping_value
                     FROM {self._qualified("observations")} AS o
-                    INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                        ON c.cert_hash = o.cert_hash
                     WHERE o.seen_at >= %(start)s
                       AND o.seen_at < %(end)s
+                )
+                GROUP BY grouping_value
+                ORDER BY count DESC
+                LIMIT %(limit)s
+                """,
+                parameters={"start": start, "end": end, "limit": limit},
+            ).result_rows
+        else:
+            rows = self.client.query(
+                f"""
+                SELECT grouping_value, count() AS count
+                FROM
+                (
+                    SELECT
+                        cert_hash,
+                        {expr} AS grouping_value
+                    FROM {self._qualified("certificates")} FINAL AS c
+                    WHERE c.last_seen >= %(start)s
+                      AND c.last_seen < %(end)s
                 )
                 GROUP BY grouping_value
                 ORDER BY count DESC
