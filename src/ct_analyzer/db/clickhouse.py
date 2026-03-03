@@ -34,6 +34,10 @@ class ClickHouseRepository:
     def _qualified(self, table: str) -> str:
         return f"{self.database}.{table}"
 
+    @staticmethod
+    def _quoted_string_list(values: list[str]) -> str:
+        return ", ".join(json.dumps(value) for value in values)
+
     def _new_client(self):
         return clickhouse_connect.get_client(
             host=self.settings.clickhouse.host,
@@ -810,16 +814,22 @@ class ClickHouseRepository:
             """,
             parameters={"cutoff": cutoff, "limit": limit},
         ).result_rows
-        finding_rows = self.client.query(
-            f"""
-            SELECT cert_hash, severity, count() AS count
-            FROM {self._qualified("cert_findings")}
-            WHERE created_at >= %(cutoff)s
-              AND finding_code != 'ANOMALY_SCORE'
-            GROUP BY cert_hash, severity
-            """,
-            parameters={"cutoff": cutoff},
-        ).result_rows
+        cert_hashes = [str(row[0]) for row in cert_rows]
+        if cert_hashes:
+            quoted_hashes = self._quoted_string_list(cert_hashes)
+            finding_rows = self.client.query(
+                f"""
+                SELECT cert_hash, severity, count() AS count
+                FROM {self._qualified("cert_findings")}
+                WHERE created_at >= %(cutoff)s
+                  AND finding_code != 'ANOMALY_SCORE'
+                  AND cert_hash IN ({quoted_hashes})
+                GROUP BY cert_hash, severity
+                """,
+                parameters={"cutoff": cutoff},
+            ).result_rows
+        else:
+            finding_rows = []
         severity_counts: dict[str, dict[str, int]] = defaultdict(dict)
         for cert_hash, severity, count in finding_rows:
             severity_counts[str(cert_hash)][str(severity)] = int(count)
@@ -868,17 +878,23 @@ class ClickHouseRepository:
             """,
             parameters={"start": start, "end": end, "limit": limit},
         ).result_rows
-        finding_rows = self.client.query(
-            f"""
-            SELECT cert_hash, severity, count() AS count
-            FROM {self._qualified("cert_findings")}
-            WHERE created_at >= %(start)s
-              AND created_at < %(end)s
-              AND finding_code != 'ANOMALY_SCORE'
-            GROUP BY cert_hash, severity
-            """,
-            parameters={"start": start, "end": end},
-        ).result_rows
+        cert_hashes = [str(row[0]) for row in cert_rows]
+        if cert_hashes:
+            quoted_hashes = self._quoted_string_list(cert_hashes)
+            finding_rows = self.client.query(
+                f"""
+                SELECT cert_hash, severity, count() AS count
+                FROM {self._qualified("cert_findings")}
+                WHERE created_at >= %(start)s
+                  AND created_at < %(end)s
+                  AND finding_code != 'ANOMALY_SCORE'
+                  AND cert_hash IN ({quoted_hashes})
+                GROUP BY cert_hash, severity
+                """,
+                parameters={"start": start, "end": end},
+            ).result_rows
+        else:
+            finding_rows = []
         severity_counts: dict[str, dict[str, int]] = defaultdict(dict)
         for cert_hash, severity, count in finding_rows:
             severity_counts[str(cert_hash)][str(severity)] = int(count)
