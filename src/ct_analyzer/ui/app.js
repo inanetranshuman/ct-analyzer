@@ -34,6 +34,7 @@ const els = {
   issuanceTemplates: document.querySelector("#issuance-templates"),
   sigAlgList: document.querySelector("#sig-alg-list"),
   keyTypeList: document.querySelector("#key-type-list"),
+  findingList: document.querySelector("#finding-list"),
   ekuList: document.querySelector("#eku-list"),
   breakdownTable: document.querySelector("#breakdown-table"),
   anomalyList: document.querySelector("#anomaly-list"),
@@ -397,9 +398,10 @@ async function refreshDashboard() {
       fetchJson(`/stats/issuer/godaddy?days=${state.days}`),
       fetchJson(`/profile/issuer/godaddy?days=${state.days}`),
       fetchJson(`/breakdown/issuer/godaddy?group_by=${encodeURIComponent(state.groupBy)}&days=${state.days}&limit=12`),
+      fetchJson(`/breakdown/issuer/godaddy?group_by=finding_code&days=${state.days}&limit=5`),
       fetchJson(`/anomalies/issuer/godaddy?days=${Math.min(state.days, 14)}&limit=12`),
     ]);
-    const [statsResult, profileResult, breakdownResult, anomaliesResult] = results;
+    const [statsResult, profileResult, breakdownResult, findingsResult, anomaliesResult] = results;
 
     const firstError = results.find(
       (result) => result.status === "rejected" && String(result.reason?.message).includes("401"),
@@ -438,7 +440,16 @@ async function refreshDashboard() {
       renderPanelError(els.issuanceTemplates, "Could not load issuance template patterns.");
       renderPanelError(els.sigAlgList, "Could not load signature algorithm patterns.");
       renderPanelError(els.keyTypeList, "Could not load key type patterns.");
+      renderPanelError(els.findingList, "Could not load top findings.");
       renderPanelError(els.ekuList, "Could not load EKU patterns.");
+      failedSections += 1;
+    }
+
+    if (findingsResult.status === "fulfilled") {
+      renderRankList(els.findingList, findingsResult.value.buckets);
+      loadedSections += 1;
+    } else if (profileResult.status === "fulfilled") {
+      renderPanelError(els.findingList, "Could not load top findings.");
       failedSections += 1;
     }
 
