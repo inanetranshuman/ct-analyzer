@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS ct_analyzer.certificates
     cert_hash String,
     subject_cn String,
     subject_dn String,
+    subject_org String,
     issuer_cn String,
     issuer_dn String,
     issuer_spki_hash Nullable(String),
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS ct_analyzer.certificates
     policy_oids Array(String),
     aia_ocsp_urls Array(String),
     crl_dp_urls Array(String),
+    validation_type LowCardinality(String),
     has_must_staple UInt8,
     has_ip_san UInt8,
     has_uri_san UInt8,
@@ -41,6 +43,12 @@ CREATE TABLE IF NOT EXISTS ct_analyzer.certificates
 )
 ENGINE = ReplacingMergeTree(last_seen)
 ORDER BY (cert_hash);
+
+ALTER TABLE ct_analyzer.certificates
+    ADD COLUMN IF NOT EXISTS subject_org String AFTER subject_dn;
+
+ALTER TABLE ct_analyzer.certificates
+    ADD COLUMN IF NOT EXISTS validation_type LowCardinality(String) AFTER crl_dp_urls;
 
 CREATE TABLE IF NOT EXISTS ct_analyzer.observations
 (

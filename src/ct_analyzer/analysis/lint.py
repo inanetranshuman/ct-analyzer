@@ -4,13 +4,29 @@ import json
 import re
 from datetime import UTC, datetime
 
-from ct_analyzer.cert.domains import idn_confusable_evidence
+from ct_analyzer.cert.domains import idn_confusable_evidence, organization_tokens, registered_domain_tokens
 from ct_analyzer.cert.x509_features import CertificateMetadata, FindingRecord
 from ct_analyzer.config import Settings
 
 
 SUSPICIOUS_DN_RE = re.compile(r"\s{2,}|(^,)|(,,)|,\s*,")
 DEPRECATED_SIG_ALGS = {"MD5", "SHA1"}
+BRAND_KEYWORDS = {
+    "amazon",
+    "apple",
+    "bankofamerica",
+    "chase",
+    "dropbox",
+    "facebook",
+    "github",
+    "google",
+    "microsoft",
+    "okta",
+    "onedrive",
+    "outlook",
+    "paypal",
+    "stripe",
+}
 
 
 def lint_certificate(metadata: CertificateMetadata, settings: Settings) -> list[FindingRecord]:
@@ -68,6 +84,37 @@ def lint_certificate(metadata: CertificateMetadata, settings: Settings) -> list[
 
     if not metadata.aia_ocsp_urls:
         add("AIA_OCSP_MISSING", "info", {})
+
+    if metadata.subject_org:
+        org_tokens = set(organization_tokens(metadata.subject_org))
+        domain_tokens = {
+            token
+            for dns_name in metadata.dns_names
+            for token in registered_domain_tokens(dns_name)
+        }
+        brand_matches = sorted(org_tokens.intersection(BRAND_KEYWORDS))
+        if brand_matches and not org_tokens.intersection(domain_tokens):
+            add(
+                "ORG_BRAND_IMPERSONATION",
+                "medium" if metadata.validation_type in {"OV", "EV"} else "low",
+                {
+                    "subject_org": metadata.subject_org,
+                    "brand_matches": brand_matches,
+                    "domain_tokens": sorted(domain_tokens),
+                    "validation_type": metadata.validation_type,
+                },
+            )
+        if org_tokens and domain_tokens and not org_tokens.intersection(domain_tokens):
+            add(
+                "ORG_DOMAIN_MISMATCH",
+                "medium" if metadata.validation_type in {"OV", "EV"} else "low",
+                {
+                    "subject_org": metadata.subject_org,
+                    "org_tokens": sorted(org_tokens),
+                    "domain_tokens": sorted(domain_tokens),
+                    "validation_type": metadata.validation_type,
+                },
+            )
 
     for dns_name in metadata.dns_names[:10]:
         evidence = idn_confusable_evidence(dns_name)

@@ -11,6 +11,7 @@ import clickhouse_connect
 
 from ct_analyzer.analysis.baseline import IssuerBaseline
 from ct_analyzer.cert.domains import to_unicode_hostname
+from ct_analyzer.cert.x509_features import validation_type_from_policy_oids
 from ct_analyzer.config import Settings
 from ct_analyzer.db.migrations import load_schema_sql
 
@@ -33,6 +34,17 @@ class ClickHouseRepository:
 
     def _qualified(self, table: str) -> str:
         return f"{self.database}.{table}"
+
+    @staticmethod
+    def _validation_type_expr(alias: str = "c") -> str:
+        return (
+            f"multiIf("
+            f"has({alias}.policy_oids, '2.23.140.1.1'), 'EV', "
+            f"has({alias}.policy_oids, '2.23.140.1.2.2'), 'OV', "
+            f"has({alias}.policy_oids, '2.23.140.1.2.1'), 'DV', "
+            f"'Unknown'"
+            f")"
+        )
 
     @staticmethod
     def _quoted_string_list(values: list[str]) -> str:
@@ -264,6 +276,22 @@ class ClickHouseRepository:
             """,
             parameters={"cutoff": cutoff},
         ).first_row or (0, 0, 0, 0, 0, 0, 0, 0, 0)
+        validation_row = self.client.query(
+            f"""
+            SELECT
+                countIf(validation_type = 'DV') AS dv_count,
+                countIf(validation_type = 'OV') AS ov_count,
+                countIf(validation_type = 'EV') AS ev_count,
+                countIf(validation_type = 'Unknown') AS unknown_validation_count
+            FROM
+            (
+                SELECT {self._validation_type_expr()} AS validation_type
+                FROM {self._qualified("certificates")} FINAL
+                WHERE last_seen >= %(cert_cutoff)s
+            )
+            """,
+            parameters={"cert_cutoff": datetime.now(tz=UTC) - timedelta(days=days)},
+        ).first_row or (0, 0, 0, 0)
         return {
             "days": days,
             "cert_count": int(rows[0]),
@@ -275,6 +303,10 @@ class ClickHouseRepository:
             "email_san_count": int(rows[6]),
             "unusual_eku_count": int(rows[7]),
             "ca_true_leaf_count": int(rows[8]),
+            "dv_count": int(validation_row[0]),
+            "ov_count": int(validation_row[1]),
+            "ev_count": int(validation_row[2]),
+            "unknown_validation_count": int(validation_row[3]),
         }
 
     def query_issuer_stats_range(self, date_from: date, date_to: date) -> dict[str, Any]:
@@ -299,6 +331,23 @@ class ClickHouseRepository:
             """,
             parameters={"start": start, "end": end},
         ).first_row or (0, 0, 0, 0, 0, 0, 0, 0, 0)
+        validation_row = self.client.query(
+            f"""
+            SELECT
+                countIf(validation_type = 'DV') AS dv_count,
+                countIf(validation_type = 'OV') AS ov_count,
+                countIf(validation_type = 'EV') AS ev_count,
+                countIf(validation_type = 'Unknown') AS unknown_validation_count
+            FROM
+            (
+                SELECT {self._validation_type_expr()} AS validation_type
+                FROM {self._qualified("certificates")} FINAL
+                WHERE last_seen >= %(start)s
+                  AND last_seen < %(end)s
+            )
+            """,
+            parameters={"start": start, "end": end},
+        ).first_row or (0, 0, 0, 0)
         return {
             "issuer": "godaddy",
             "date_from": date_from.isoformat(),
@@ -313,6 +362,10 @@ class ClickHouseRepository:
                 "email_san_count": int(rows[6]),
                 "unusual_eku_count": int(rows[7]),
                 "ca_true_leaf_count": int(rows[8]),
+                "dv_count": int(validation_row[0]),
+                "ov_count": int(validation_row[1]),
+                "ev_count": int(validation_row[2]),
+                "unknown_validation_count": int(validation_row[3]),
             },
         }
 
@@ -425,6 +478,20 @@ class ClickHouseRepository:
             LIMIT 5
             """
         )
+        top_validation_types = _top_rows(
+            f"""
+            SELECT validation_type, count() AS count
+            FROM
+            (
+                SELECT {self._validation_type_expr()} AS validation_type
+                FROM {self._qualified("certificates")} FINAL
+                WHERE last_seen >= %(cutoff)s
+            )
+            GROUP BY validation_type
+            ORDER BY count DESC
+            LIMIT 5
+            """
+        )
 
         return {
             "issuer": "godaddy",
@@ -451,6 +518,7 @@ class ClickHouseRepository:
             "top_key_types": top_key_types,
             "top_key_sizes": top_key_sizes,
             "top_eku_sets": top_eku_sets,
+            "top_validation_types": top_validation_types,
         }
 
     def query_issuer_profile_range(self, date_from: date, date_to: date) -> dict[str, Any]:
@@ -533,6 +601,21 @@ class ClickHouseRepository:
             LIMIT 5
             """
         )
+        top_validation_types = _top_rows(
+            f"""
+            SELECT validation_type, count() AS count
+            FROM
+            (
+                SELECT {self._validation_type_expr()} AS validation_type
+                FROM {self._qualified("certificates")} FINAL
+                WHERE last_seen >= %(start)s
+                  AND last_seen < %(end)s
+            )
+            GROUP BY validation_type
+            ORDER BY count DESC
+            LIMIT 5
+            """
+        )
 
         return {
             "issuer": "godaddy",
@@ -560,6 +643,7 @@ class ClickHouseRepository:
             "top_key_types": top_key_types,
             "top_key_sizes": top_key_sizes,
             "top_eku_sets": top_eku_sets,
+            "top_validation_types": top_validation_types,
         }
 
     def query_issuer_breakdown(self, group_by: str, days: int, limit: int) -> dict[str, Any]:
@@ -567,6 +651,7 @@ class ClickHouseRepository:
         groupings = {
             "issuer_cn": ("c.issuer_cn", "issuer_common_name"),
             "issuer_dn": ("c.issuer_dn", "issuer_distinguished_name"),
+            "validation_type": (self._validation_type_expr(), "validation_type"),
             "sig_alg": ("c.sig_alg", "signature_algorithm"),
             "key_type": ("c.key_type", "key_type"),
             "key_size": ("toString(c.key_size)", "key_size"),
@@ -685,6 +770,7 @@ class ClickHouseRepository:
         groupings = {
             "issuer_cn": ("c.issuer_cn", "issuer_common_name"),
             "issuer_dn": ("c.issuer_dn", "issuer_distinguished_name"),
+            "validation_type": (self._validation_type_expr(), "validation_type"),
             "sig_alg": ("c.sig_alg", "signature_algorithm"),
             "key_type": ("c.key_type", "key_type"),
             "key_size": ("toString(c.key_size)", "key_size"),
@@ -997,6 +1083,7 @@ class ClickHouseRepository:
             return None
 
         certificate = dict(zip(cert_row.column_names, cert_row.result_rows[0]))
+        certificate["validation_type"] = validation_type_from_policy_oids(certificate.get("policy_oids", []))
         finding_rows = self.client.query(
             f"""
             SELECT finding_code, severity, evidence_json, created_at
@@ -1026,6 +1113,7 @@ class ClickHouseRepository:
         days: int,
         limit: int,
         registered_domain: str | None = None,
+        validation_type: str | None = None,
         subject_cn_contains: str | None = None,
         issuer_contains: str | None = None,
         eku_contains: str | None = None,
@@ -1043,6 +1131,9 @@ class ClickHouseRepository:
         if registered_domain:
             where_clauses.append("o.registered_domain = %(registered_domain)s")
             parameters["registered_domain"] = registered_domain
+        if validation_type:
+            where_clauses.append(f"{self._validation_type_expr()} = %(validation_type)s")
+            parameters["validation_type"] = validation_type
         if subject_cn_contains:
             where_clauses.append("positionCaseInsensitive(c.subject_cn, %(subject_cn_contains)s) > 0")
             parameters["subject_cn_contains"] = subject_cn_contains
@@ -1092,6 +1183,7 @@ class ClickHouseRepository:
                 c.issuer_dn,
                 c.dns_names,
                 c.eku,
+                {self._validation_type_expr()} AS validation_type,
                 c.validity_days,
                 c.has_wildcard,
                 c.has_punycode,
@@ -1108,6 +1200,7 @@ class ClickHouseRepository:
                 c.issuer_dn,
                 c.dns_names,
                 c.eku,
+                validation_type,
                 c.validity_days,
                 c.has_wildcard,
                 c.has_punycode,
@@ -1124,6 +1217,7 @@ class ClickHouseRepository:
                 "issuer_dn": issuer_dn,
                 "dns_names": list(dns_names)[:10],
                 "eku": list(eku_values),
+                "validation_type": validation_type,
                 "validity_days": int(validity_days),
                 "has_wildcard": bool(has_wildcard_value),
                 "has_punycode": bool(has_punycode_value),
@@ -1137,6 +1231,7 @@ class ClickHouseRepository:
                 issuer_dn,
                 dns_names,
                 eku_values,
+                validation_type,
                 validity_days,
                 has_wildcard_value,
                 has_punycode_value,

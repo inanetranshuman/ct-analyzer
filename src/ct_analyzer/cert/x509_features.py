@@ -21,12 +21,19 @@ EKU_LABELS = {
     ExtendedKeyUsageOID.OCSP_SIGNING.dotted_string: "ocspSigning",
 }
 
+VALIDATION_TYPE_POLICY_OIDS = {
+    "EV": "2.23.140.1.1",
+    "OV": "2.23.140.1.2.2",
+    "DV": "2.23.140.1.2.1",
+}
+
 
 @dataclass(slots=True)
 class CertificateMetadata:
     cert_hash: str
     subject_cn: str
     subject_dn: str
+    subject_org: str
     issuer_cn: str
     issuer_dn: str
     issuer_spki_hash: str | None
@@ -49,6 +56,7 @@ class CertificateMetadata:
     policy_oids: list[str]
     aia_ocsp_urls: list[str]
     crl_dp_urls: list[str]
+    validation_type: str
     has_must_staple: int
     has_ip_san: int
     has_uri_san: int
@@ -249,6 +257,16 @@ def _basic_constraints_ca(cert: x509.Certificate) -> int:
     return int(extension.value.ca) if extension is not None else 0
 
 
+def validation_type_from_policy_oids(policy_oids: list[str]) -> str:
+    if VALIDATION_TYPE_POLICY_OIDS["EV"] in policy_oids:
+        return "EV"
+    if VALIDATION_TYPE_POLICY_OIDS["OV"] in policy_oids:
+        return "OV"
+    if VALIDATION_TYPE_POLICY_OIDS["DV"] in policy_oids:
+        return "DV"
+    return "Unknown"
+
+
 def extract_certificate_metadata(
     cert: x509.Certificate,
     cert_hash: str,
@@ -256,10 +274,12 @@ def extract_certificate_metadata(
     issuer_spki_hash: str | None = None,
 ) -> CertificateMetadata:
     subject_cn = _name_value(cert.subject, NameOID.COMMON_NAME)
+    subject_org = _name_value(cert.subject, NameOID.ORGANIZATION_NAME)
     issuer_cn = _name_value(cert.issuer, NameOID.COMMON_NAME)
     subject_dn = cert.subject.rfc4514_string()
     issuer_dn = cert.issuer.rfc4514_string()
     dns_names, ip_count, uri_count, email_count = _extract_dns_sans(cert)
+    policy_oids = _extract_certificate_policies(cert)
     key_type, key_size = _key_info(cert)
     not_before = cert.not_valid_before_utc.astimezone(UTC)
     not_after = cert.not_valid_after_utc.astimezone(UTC)
@@ -267,6 +287,7 @@ def extract_certificate_metadata(
         cert_hash=cert_hash,
         subject_cn=subject_cn,
         subject_dn=subject_dn,
+        subject_org=subject_org,
         issuer_cn=issuer_cn,
         issuer_dn=issuer_dn,
         issuer_spki_hash=issuer_spki_hash,
@@ -286,9 +307,10 @@ def extract_certificate_metadata(
         basic_constraints_ca=_basic_constraints_ca(cert),
         ski=_extract_ski(cert),
         aki=_extract_aki(cert),
-        policy_oids=_extract_certificate_policies(cert),
+        policy_oids=policy_oids,
         aia_ocsp_urls=_extract_aia_ocsp_urls(cert),
         crl_dp_urls=_extract_crl_dp_urls(cert),
+        validation_type=validation_type_from_policy_oids(policy_oids),
         has_must_staple=_has_must_staple(cert),
         has_ip_san=int(ip_count > 0),
         has_uri_san=int(uri_count > 0),

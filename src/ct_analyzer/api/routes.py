@@ -36,6 +36,7 @@ class IssuerProfileResponse(BaseModel):
     top_key_types: list[dict[str, Any]]
     top_key_sizes: list[dict[str, Any]]
     top_eku_sets: list[dict[str, Any]]
+    top_validation_types: list[dict[str, Any]]
 
 
 class IssuerBreakdownResponse(BaseModel):
@@ -95,12 +96,14 @@ class CertificateDetailResponse(BaseModel):
     cert_hash: str
     subject_cn: str
     subject_dn: str
+    subject_org: str
     issuer_cn: str
     issuer_dn: str
     serial_number: str
     dns_names: list[str]
     dns_names_unicode: list[str]
     eku: list[str]
+    validation_type: str
     anomaly_score: int
     findings: list[dict[str, Any]]
 
@@ -263,6 +266,7 @@ def build_router(
         days: int = Query(default=7, ge=1, le=30),
         limit: int = Query(default=25, ge=1, le=100),
         registered_domain: str | None = Query(default=None),
+        validation_type: str | None = Query(default=None),
         subject_cn_contains: str | None = Query(default=None),
         issuer_contains: str | None = Query(default=None),
         eku_contains: str | None = Query(default=None),
@@ -281,6 +285,7 @@ def build_router(
             days=days,
             limit=limit,
             registered_domain=registered_domain,
+            validation_type=validation_type,
             subject_cn_contains=subject_cn_contains,
             issuer_contains=issuer_contains,
             eku_contains=eku_contains,

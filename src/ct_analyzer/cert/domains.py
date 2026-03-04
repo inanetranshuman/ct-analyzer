@@ -11,6 +11,31 @@ from publicsuffix2 import PublicSuffixList
 DOMAIN_LABEL_RE = re.compile(r"[a-z0-9-]+")
 COMBINING_MARK_RE = re.compile(r"[\u0300-\u036f]")
 ASCII_ALNUM_RE = re.compile(r"[a-z0-9]")
+ORG_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+ORG_STOPWORDS = {
+    "and",
+    "co",
+    "company",
+    "corp",
+    "corporation",
+    "gmbh",
+    "group",
+    "holdings",
+    "inc",
+    "incorporated",
+    "limited",
+    "llc",
+    "ltd",
+    "of",
+    "plc",
+    "pte",
+    "sa",
+    "services",
+    "solutions",
+    "systems",
+    "the",
+}
 
 CONFUSABLE_CHAR_MAP = {
     "а": "a",
@@ -112,6 +137,25 @@ def to_unicode_hostname(hostname: str) -> str:
     except UnicodeError:
         decoded = value
     return f"*.{decoded}" if wildcard else decoded
+
+
+def organization_tokens(value: str) -> list[str]:
+    if not value:
+        return []
+    normalized = unicodedata.normalize("NFKD", value.lower())
+    without_marks = COMBINING_MARK_RE.sub("", normalized)
+    tokens = ORG_TOKEN_RE.findall(without_marks)
+    return [token for token in tokens if len(token) > 2 and token not in ORG_STOPWORDS]
+
+
+def registered_domain_tokens(hostname: str) -> list[str]:
+    registered = get_registered_domain(hostname)
+    if not registered:
+        return []
+    tokens: list[str] = []
+    for label in registered.split("."):
+        tokens.extend(organization_tokens(label))
+    return tokens
 
 
 def _label_script(char: str) -> str | None:

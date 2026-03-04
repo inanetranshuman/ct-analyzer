@@ -10,6 +10,8 @@ from ct_analyzer.cert.domains import (
     has_punycode,
     highest_label_entropy,
     idn_confusable_evidence,
+    organization_tokens,
+    registered_domain_tokens,
     to_unicode_hostname,
 )
 from ct_analyzer.cert.x509_features import CertificateMetadata, FindingRecord, Signal
@@ -41,6 +43,59 @@ def analyze_certificate(
         signals.append(
             Signal(code="wildcard_san", severity=severity, score=weights.wildcard, evidence={"dns_names": metadata.dns_names[:5]})
         )
+
+    if metadata.subject_org:
+        org_tokens = set(organization_tokens(metadata.subject_org))
+        domain_tokens = {
+            token
+            for dns_name in metadata.dns_names
+            for token in registered_domain_tokens(dns_name)
+        }
+        if org_tokens and domain_tokens and not org_tokens.intersection(domain_tokens):
+            signals.append(
+                Signal(
+                    code="org_domain_mismatch",
+                    severity="medium" if metadata.validation_type in {"OV", "EV"} else "info",
+                    score=weights.org_domain_mismatch,
+                    evidence={
+                        "subject_org": metadata.subject_org,
+                        "org_tokens": sorted(org_tokens),
+                        "domain_tokens": sorted(domain_tokens),
+                        "validation_type": metadata.validation_type,
+                    },
+                )
+            )
+        brand_keywords = {
+            "amazon",
+            "apple",
+            "bankofamerica",
+            "chase",
+            "dropbox",
+            "facebook",
+            "github",
+            "google",
+            "microsoft",
+            "okta",
+            "onedrive",
+            "outlook",
+            "paypal",
+            "stripe",
+        }
+        brand_matches = sorted(org_tokens.intersection(brand_keywords))
+        if brand_matches and not org_tokens.intersection(domain_tokens):
+            signals.append(
+                Signal(
+                    code="brand_org_impersonation",
+                    severity="high" if metadata.validation_type in {"OV", "EV"} else "medium",
+                    score=weights.brand_org_impersonation,
+                    evidence={
+                        "subject_org": metadata.subject_org,
+                        "brand_matches": brand_matches,
+                        "domain_tokens": sorted(domain_tokens),
+                        "validation_type": metadata.validation_type,
+                    },
+                )
+            )
 
     domain_burst_matches = []
     if domain_burst_counts:

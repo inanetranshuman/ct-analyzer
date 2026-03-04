@@ -91,6 +91,8 @@ class AnomalyWeights(BaseModel):
     wildcard: int = 8
     punycode: int = 15
     idn_confusable: int = 14
+    org_domain_mismatch: int = 12
+    brand_org_impersonation: int = 16
     domain_burst: int = 16
     entropy: int = 18
     keyword: int = 6
@@ -210,6 +212,8 @@ class Settings(BaseModel):
                 wildcard=_env_int("ANOMALY_WEIGHT_WILDCARD", 8),
                 punycode=_env_int("ANOMALY_WEIGHT_PUNYCODE", 15),
                 idn_confusable=_env_int("ANOMALY_WEIGHT_IDN_CONFUSABLE", 14),
+                org_domain_mismatch=_env_int("ANOMALY_WEIGHT_ORG_DOMAIN_MISMATCH", 12),
+                brand_org_impersonation=_env_int("ANOMALY_WEIGHT_BRAND_ORG_IMPERSONATION", 16),
                 domain_burst=_env_int("ANOMALY_WEIGHT_DOMAIN_BURST", 16),
                 entropy=_env_int("ANOMALY_WEIGHT_ENTROPY", 18),
                 keyword=_env_int("ANOMALY_WEIGHT_KEYWORD", 6),

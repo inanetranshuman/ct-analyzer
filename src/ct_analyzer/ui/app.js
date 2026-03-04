@@ -12,6 +12,8 @@ const SIGNAL_DESCRIPTIONS = {
   punycode_entropy_combo: "The certificate combines punycode with a high-entropy label, which is more suspicious than punycode alone and can indicate deceptive or algorithmic naming.",
   high_entropy_label: "A label in the SAN list has unusually high character entropy, which can indicate algorithmically generated or deceptive hostnames.",
   idn_confusable: "The internationalized domain name appears to collapse into a plausible ASCII lookalike or mixes scripts in a way that can mislead a reader.",
+  org_domain_mismatch: "The subject organization name does not appear to line up with the registered domain tokens, which can indicate impersonation or misleading identity fields.",
+  brand_org_impersonation: "The subject organization contains a recognizable brand-like name that does not align with the registered domain, which can indicate impersonation.",
   registered_domain_burst: "The same registered domain has had an unusual number of distinct certificates issued in a short recent window, which can indicate bulk generation or compromise-driven churn.",
   suspicious_keywords: "The SAN list contains words often associated with phishing or impersonation flows, such as login or billing.",
   validity_outlier: "The certificate validity period is longer than the issuer's recent baseline.",
@@ -99,7 +101,17 @@ function renderPanelError(node, message) {
 
 function renderMetricCards(counts) {
   clearNode(els.metricCards);
+  const hiddenLabels = new Set([
+    "ip_san_count",
+    "uri_san_count",
+    "email_san_count",
+    "unusual_eku_count",
+    "ca_true_leaf_count",
+  ]);
   for (const [label, value] of Object.entries(counts)) {
+    if (hiddenLabels.has(label)) {
+      continue;
+    }
     const fragment = els.metricTemplate.content.cloneNode(true);
     fragment.querySelector(".metric-label").textContent = label.replaceAll("_", " ");
     fragment.querySelector(".metric-value").textContent = numberFormat(value);
@@ -146,6 +158,11 @@ function renderIssuanceTemplates(profile) {
       attribute: "EKU Set",
       value: profile.top_eku_sets?.[0]?.value || "Unknown",
       support: formatShare(profile.top_eku_sets?.[0]?.count, profile.cert_count),
+    },
+    {
+      attribute: "Validation Type",
+      value: profile.top_validation_types?.[0]?.value || "Unknown",
+      support: formatShare(profile.top_validation_types?.[0]?.count, profile.cert_count),
     },
     {
       attribute: "Validity Pattern",
@@ -342,7 +359,9 @@ async function openCertificateDetail(anomaly) {
             <div><dt>Issuer CN</dt><dd>${details.issuer_cn || "none"}</dd></div>
             <div><dt>Issuer DN</dt><dd>${details.issuer_dn || "none"}</dd></div>
             <div><dt>Subject DN</dt><dd>${details.subject_dn || "none"}</dd></div>
+            <div><dt>Subject Org</dt><dd>${details.subject_org || "none"}</dd></div>
             <div><dt>Serial</dt><dd>${details.serial_number || "none"}</dd></div>
+            <div><dt>Validation Type</dt><dd>${details.validation_type || "Unknown"}</dd></div>
             <div><dt>Anomaly Score</dt><dd>${details.anomaly_score}</dd></div>
           </dl>
         </div>
