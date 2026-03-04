@@ -209,6 +209,35 @@ function renderRankList(node, items) {
   }
 }
 
+function formatFindingCode(value) {
+  if (!value) {
+    return "none";
+  }
+  if (value.startsWith("ZLINT_")) {
+    return `ZLint: ${value.replace(/^ZLINT_[A-Z]_/, "").toLowerCase().replaceAll("_", " ")}`;
+  }
+  return value.toLowerCase().replaceAll("_", " ");
+}
+
+function renderFindingList(items) {
+  const filteredItems = items.filter((item) => item.value !== "ANOMALY_SCORE");
+  clearNode(els.findingList);
+  if (!filteredItems.length) {
+    const empty = document.createElement("p");
+    empty.className = "auth-status";
+    empty.textContent = "No recurring findings in the selected window.";
+    els.findingList.appendChild(empty);
+    return;
+  }
+  renderRankList(
+    els.findingList,
+    filteredItems.map((item) => ({
+      ...item,
+      value: formatFindingCode(item.value),
+    })),
+  );
+}
+
 function renderBreakdown(payload) {
   const rows = payload.buckets
     .map(
@@ -440,16 +469,16 @@ async function refreshDashboard() {
       renderPanelError(els.issuanceTemplates, "Could not load issuance template patterns.");
       renderPanelError(els.sigAlgList, "Could not load signature algorithm patterns.");
       renderPanelError(els.keyTypeList, "Could not load key type patterns.");
-      renderPanelError(els.findingList, "Could not load top findings.");
+      renderPanelError(els.findingList, "Could not load common findings.");
       renderPanelError(els.ekuList, "Could not load EKU patterns.");
       failedSections += 1;
     }
 
     if (findingsResult.status === "fulfilled") {
-      renderRankList(els.findingList, findingsResult.value.buckets);
+      renderFindingList(findingsResult.value.buckets);
       loadedSections += 1;
     } else if (profileResult.status === "fulfilled") {
-      renderPanelError(els.findingList, "Could not load top findings.");
+      renderPanelError(els.findingList, "Could not load common findings.");
       failedSections += 1;
     }
 
