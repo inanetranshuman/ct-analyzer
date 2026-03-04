@@ -36,12 +36,13 @@ class ClickHouseRepository:
         return f"{self.database}.{table}"
 
     @staticmethod
-    def _validation_type_expr(alias: str = "c") -> str:
+    def _validation_type_expr(alias: str | None = "c") -> str:
+        prefix = f"{alias}." if alias else ""
         return (
             f"multiIf("
-            f"has({alias}.policy_oids, '2.23.140.1.1'), 'EV', "
-            f"has({alias}.policy_oids, '2.23.140.1.2.2'), 'OV', "
-            f"has({alias}.policy_oids, '2.23.140.1.2.1'), 'DV', "
+            f"has({prefix}policy_oids, '2.23.140.1.1'), 'EV', "
+            f"has({prefix}policy_oids, '2.23.140.1.2.2'), 'OV', "
+            f"has({prefix}policy_oids, '2.23.140.1.2.1'), 'DV', "
             f"'Unknown'"
             f")"
         )
@@ -285,7 +286,7 @@ class ClickHouseRepository:
                 countIf(validation_type = 'Unknown') AS unknown_validation_count
             FROM
             (
-                SELECT {self._validation_type_expr()} AS validation_type
+                SELECT {self._validation_type_expr(None)} AS validation_type
                 FROM {self._qualified("certificates")} FINAL
                 WHERE last_seen >= %(cert_cutoff)s
             )
@@ -340,7 +341,7 @@ class ClickHouseRepository:
                 countIf(validation_type = 'Unknown') AS unknown_validation_count
             FROM
             (
-                SELECT {self._validation_type_expr()} AS validation_type
+                SELECT {self._validation_type_expr(None)} AS validation_type
                 FROM {self._qualified("certificates")} FINAL
                 WHERE last_seen >= %(start)s
                   AND last_seen < %(end)s
@@ -483,7 +484,7 @@ class ClickHouseRepository:
             SELECT validation_type, count() AS count
             FROM
             (
-                SELECT {self._validation_type_expr()} AS validation_type
+                SELECT {self._validation_type_expr(None)} AS validation_type
                 FROM {self._qualified("certificates")} FINAL
                 WHERE last_seen >= %(cutoff)s
             )
@@ -606,7 +607,7 @@ class ClickHouseRepository:
             SELECT validation_type, count() AS count
             FROM
             (
-                SELECT {self._validation_type_expr()} AS validation_type
+                SELECT {self._validation_type_expr(None)} AS validation_type
                 FROM {self._qualified("certificates")} FINAL
                 WHERE last_seen >= %(start)s
                   AND last_seen < %(end)s
