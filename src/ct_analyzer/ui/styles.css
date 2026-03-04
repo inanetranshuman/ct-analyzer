@@ -412,7 +412,10 @@ body.is-loading .metric-card::after {
 }
 
 .rank-row {
-  grid-template-columns: 1fr auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
   border-bottom: 1px solid #e6edf5;
 }
 
@@ -429,6 +432,12 @@ body.is-loading .metric-card::after {
 
 .rank-count {
   color: var(--muted);
+  white-space: nowrap;
+}
+
+.rank-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .table-shell {
