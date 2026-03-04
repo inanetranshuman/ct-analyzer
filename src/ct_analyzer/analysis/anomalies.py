@@ -5,7 +5,13 @@ from datetime import UTC, datetime
 
 from ct_analyzer.analysis.baseline import IssuerBaseline
 from ct_analyzer.analysis.scoring import score_signals
-from ct_analyzer.cert.domains import contains_suspicious_keyword, highest_label_entropy, idn_confusable_evidence
+from ct_analyzer.cert.domains import (
+    contains_suspicious_keyword,
+    has_punycode,
+    highest_label_entropy,
+    idn_confusable_evidence,
+    to_unicode_hostname,
+)
 from ct_analyzer.cert.x509_features import CertificateMetadata, FindingRecord, Signal
 from ct_analyzer.config import Settings
 
@@ -14,6 +20,7 @@ def analyze_certificate(
     metadata: CertificateMetadata,
     settings: Settings,
     baseline: IssuerBaseline | None = None,
+    domain_burst_counts: dict[str, int] | None = None,
 ) -> tuple[int, list[Signal], FindingRecord]:
     signals: list[Signal] = []
     thresholds = settings.anomaly_thresholds
@@ -35,11 +42,48 @@ def analyze_certificate(
             Signal(code="wildcard_san", severity=severity, score=weights.wildcard, evidence={"dns_names": metadata.dns_names[:5]})
         )
 
+    domain_burst_matches = []
+    if domain_burst_counts:
+        for registered_domain, cert_count in sorted(domain_burst_counts.items(), key=lambda item: item[1], reverse=True):
+            if cert_count >= thresholds.domain_burst_count:
+                domain_burst_matches.append({"registered_domain": registered_domain, "cert_count": cert_count})
+    if domain_burst_matches:
+        highest_burst = domain_burst_matches[0]["cert_count"]
+        severity = "high" if highest_burst >= thresholds.domain_burst_count * 2 else "medium"
+        signals.append(
+            Signal(
+                code="registered_domain_burst",
+                severity=severity,
+                score=weights.domain_burst,
+                evidence={
+                    "matches": domain_burst_matches[:5],
+                    "threshold": thresholds.domain_burst_count,
+                    "window_hours": thresholds.domain_burst_window_hours,
+                },
+            )
+        )
+
+    confusable_by_san: dict[str, dict[str, object]] = {}
+    confusable_matches = []
+    for san in metadata.dns_names[:10]:
+        evidence = idn_confusable_evidence(san)
+        if evidence is not None:
+            confusable_by_san[san] = evidence
+            confusable_matches.append(evidence)
+
     entropy_matches = []
+    punycode_entropy_matches = []
     for san in metadata.dns_names:
-        entropy = highest_label_entropy(san)
+        punycode_label = has_punycode(san)
+        if punycode_label and san not in confusable_by_san:
+            continue
+        entropy_input = to_unicode_hostname(san) if punycode_label else san
+        entropy = highest_label_entropy(entropy_input)
         if entropy >= thresholds.high_entropy_threshold:
-            entropy_matches.append({"san": san, "entropy": round(entropy, 3)})
+            match = {"san": san, "entropy": round(entropy, 3)}
+            entropy_matches.append(match)
+            if punycode_label:
+                punycode_entropy_matches.append(match)
     if entropy_matches:
         signals.append(
             Signal(
@@ -50,11 +94,6 @@ def analyze_certificate(
             )
         )
 
-    confusable_matches = []
-    for san in metadata.dns_names[:10]:
-        evidence = idn_confusable_evidence(san)
-        if evidence is not None:
-            confusable_matches.append(evidence)
     if confusable_matches:
         signals.append(
             Signal(
@@ -79,7 +118,7 @@ def analyze_certificate(
                 evidence={"dns_names": metadata.dns_names[:5]},
             )
         )
-        if entropy_matches:
+        if punycode_entropy_matches:
             signals.append(
                 Signal(
                     code="punycode_entropy_combo",
@@ -87,7 +126,7 @@ def analyze_certificate(
                     score=max(weights.punycode, weights.entropy),
                     evidence={
                         "dns_names": metadata.dns_names[:5],
-                        "matches": entropy_matches[:5],
+                        "matches": punycode_entropy_matches[:5],
                         "threshold": thresholds.high_entropy_threshold,
                     },
                 )

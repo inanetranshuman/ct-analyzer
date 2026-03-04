@@ -222,6 +222,29 @@ class ClickHouseRepository:
             baseline.trailing_daily_avg = sum(trailing) / len(trailing) if trailing else 0.0
         return baseline
 
+    def fetch_registered_domain_burst_counts(
+        self,
+        registered_domains: list[str],
+        window_hours: int,
+    ) -> dict[str, int]:
+        domains = sorted({domain for domain in registered_domains if domain})
+        if not domains:
+            return {}
+        cutoff = datetime.now(tz=UTC) - timedelta(hours=window_hours)
+        rows = self.client.query(
+            f"""
+            SELECT
+                registered_domain,
+                uniqExact(cert_hash) AS cert_count
+            FROM {self._qualified("observations")}
+            WHERE seen_at >= %(cutoff)s
+              AND registered_domain IN ({self._quoted_string_list(domains)})
+            GROUP BY registered_domain
+            """,
+            parameters={"cutoff": cutoff},
+        ).result_rows
+        return {domain: int(count) for domain, count in rows}
+
     def query_issuer_stats(self, days: int) -> dict[str, Any]:
         cutoff = date.today() - timedelta(days=days)
         rows = self.client.query(
@@ -993,6 +1016,7 @@ class ClickHouseRepository:
             }
             for finding_code, severity, evidence_json, created_at in finding_rows
         ]
+        certificate["dns_names_unicode"] = [to_unicode_hostname(name) for name in certificate.get("dns_names", [])]
         certificate["findings"] = findings
         return certificate
 

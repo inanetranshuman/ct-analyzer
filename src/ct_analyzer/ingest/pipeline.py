@@ -146,9 +146,6 @@ class IngestionPipeline:
 
         issuer_key_value = issuer_key(metadata.issuer_dn, metadata.issuer_spki_hash)
         baseline = await self.baselines.get(issuer_key_value, self.settings.window_days)
-        _, _, anomaly_finding = analyze_certificate(metadata, self.settings, baseline=baseline)
-        lint_findings = lint_certificate(metadata, self.settings)
-        zlint_findings = await asyncio.to_thread(run_zlint, leaf_der, metadata.cert_hash, self.settings)
         observations = _build_observations(
             cert_hash=metadata.cert_hash,
             dns_names=metadata.dns_names,
@@ -156,6 +153,20 @@ class IngestionPipeline:
             issuer_key_value=issuer_key_value,
             log_id=log_id,
         )
+        registered_domains = [observation.registered_domain for observation in observations if observation.registered_domain]
+        domain_burst_counts = await asyncio.to_thread(
+            self.repository.fetch_registered_domain_burst_counts,
+            registered_domains,
+            self.settings.anomaly_thresholds.domain_burst_window_hours,
+        )
+        _, _, anomaly_finding = analyze_certificate(
+            metadata,
+            self.settings,
+            baseline=baseline,
+            domain_burst_counts=domain_burst_counts,
+        )
+        lint_findings = lint_certificate(metadata, self.settings)
+        zlint_findings = await asyncio.to_thread(run_zlint, leaf_der, metadata.cert_hash, self.settings)
         return {
             "certificates": [metadata.to_row()],
             "observations": [observation.to_row() for observation in observations],

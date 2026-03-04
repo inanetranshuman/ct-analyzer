@@ -12,6 +12,7 @@ const SIGNAL_DESCRIPTIONS = {
   punycode_entropy_combo: "The certificate combines punycode with a high-entropy label, which is more suspicious than punycode alone and can indicate deceptive or algorithmic naming.",
   high_entropy_label: "A label in the SAN list has unusually high character entropy, which can indicate algorithmically generated or deceptive hostnames.",
   idn_confusable: "The internationalized domain name appears to collapse into a plausible ASCII lookalike or mixes scripts in a way that can mislead a reader.",
+  registered_domain_burst: "The same registered domain has had an unusual number of distinct certificates issued in a short recent window, which can indicate bulk generation or compromise-driven churn.",
   suspicious_keywords: "The SAN list contains words often associated with phishing or impersonation flows, such as login or billing.",
   validity_outlier: "The certificate validity period is longer than the issuer's recent baseline.",
   validity_long: "The certificate validity period is long enough to stand out even without a baseline comparison.",
@@ -304,13 +305,34 @@ async function openCertificateDetail(anomaly) {
         `,
       )
       .join("");
-    const dnsNames = (details.dns_names || [])
-      .map((name) => `<li>${name}</li>`)
+    const detailedDnsNames = (details.dns_names || []).map((name, index) => ({
+      ascii: name,
+      unicode: details.dns_names_unicode?.[index] ?? name,
+    }));
+    const primaryDnsName = detailedDnsNames[0];
+    const detailTitle =
+      primaryDnsName &&
+      details.subject_cn === primaryDnsName.ascii &&
+      primaryDnsName.unicode !== primaryDnsName.ascii
+        ? primaryDnsName.unicode
+        : details.subject_cn || "No subject CN";
+    const dnsNames = detailedDnsNames
+      .map(({ ascii, unicode }) => {
+        if (unicode && unicode !== ascii) {
+          return `
+            <li class="dns-name-row">
+              <span class="dns-ascii">${ascii}</span>
+              <span class="dns-unicode">${unicode}</span>
+            </li>
+          `;
+        }
+        return `<li class="dns-name-row"><span class="dns-ascii">${ascii}</span></li>`;
+      })
       .join("");
     els.detailContent.innerHTML = `
       <header class="detail-header">
         <p class="eyebrow">Certificate Detail</p>
-        <h2 id="detail-title">${details.subject_cn || "No subject CN"}</h2>
+        <h2 id="detail-title">${detailTitle}</h2>
         <p class="cert-hash">${details.cert_hash}</p>
       </header>
       <section class="detail-grid">

@@ -74,6 +74,8 @@ class AuthSettings(BaseModel):
 class AnomalyThresholds(BaseModel):
     high_san_count: int = 25
     high_entropy_threshold: float = 3.6
+    domain_burst_count: int = 5
+    domain_burst_window_hours: int = 12
     medium_validity_days: int = 397
     high_validity_days: int = 825
     wildcard_baseline_rate: float = 0.15
@@ -89,6 +91,7 @@ class AnomalyWeights(BaseModel):
     wildcard: int = 8
     punycode: int = 15
     idn_confusable: int = 14
+    domain_burst: int = 16
     entropy: int = 18
     keyword: int = 6
     validity: int = 12
@@ -189,6 +192,8 @@ class Settings(BaseModel):
             anomaly_thresholds=AnomalyThresholds(
                 high_san_count=_env_int("ANOMALY_HIGH_SAN_COUNT", 25),
                 high_entropy_threshold=_env_float("ANOMALY_HIGH_ENTROPY_THRESHOLD", 3.6),
+                domain_burst_count=_env_int("ANOMALY_DOMAIN_BURST_COUNT", 5),
+                domain_burst_window_hours=_env_int("ANOMALY_DOMAIN_BURST_WINDOW_HOURS", 12),
                 medium_validity_days=_env_int("ANOMALY_VALIDITY_MEDIUM_DAYS", 397),
                 high_validity_days=_env_int("ANOMALY_VALIDITY_HIGH_DAYS", 825),
                 wildcard_baseline_rate=_env_float("ANOMALY_WILDCARD_BASELINE_RATE", 0.15),
@@ -205,6 +210,7 @@ class Settings(BaseModel):
                 wildcard=_env_int("ANOMALY_WEIGHT_WILDCARD", 8),
                 punycode=_env_int("ANOMALY_WEIGHT_PUNYCODE", 15),
                 idn_confusable=_env_int("ANOMALY_WEIGHT_IDN_CONFUSABLE", 14),
+                domain_burst=_env_int("ANOMALY_WEIGHT_DOMAIN_BURST", 16),
                 entropy=_env_int("ANOMALY_WEIGHT_ENTROPY", 18),
                 keyword=_env_int("ANOMALY_WEIGHT_KEYWORD", 6),
                 validity=_env_int("ANOMALY_WEIGHT_VALIDITY", 12),

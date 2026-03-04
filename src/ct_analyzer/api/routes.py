@@ -99,6 +99,7 @@ class CertificateDetailResponse(BaseModel):
     issuer_dn: str
     serial_number: str
     dns_names: list[str]
+    dns_names_unicode: list[str]
     eku: list[str]
     anomaly_score: int
     findings: list[dict[str, Any]]
