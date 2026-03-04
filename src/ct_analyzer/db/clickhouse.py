@@ -678,24 +678,15 @@ class ClickHouseRepository:
 
         expr, label = groupings[group_by]
         if group_by in {"finding_code", "severity"}:
+            source_column = "finding_code" if group_by == "finding_code" else "severity"
             rows = self.client.query(
                 f"""
                 SELECT
-                    grouping_value,
-                    count() AS count
-                FROM
-                (
-                    SELECT DISTINCT
-                        c.cert_hash,
-                        {expr} AS grouping_value
-                    FROM {self._qualified("observations")} AS o
-                    INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                        ON c.cert_hash = o.cert_hash
-                    LEFT JOIN {self._qualified("cert_findings")} AS f
-                        ON f.cert_hash = c.cert_hash
-                    WHERE o.seen_at >= %(cutoff)s
-                      AND f.created_at >= %(cutoff)s
-                )
+                    {source_column} AS grouping_value,
+                    uniqExact(cert_hash) AS count
+                FROM {self._qualified("cert_findings")}
+                WHERE created_at >= %(cutoff)s
+                  AND {source_column} != ''
                 GROUP BY grouping_value
                 ORDER BY count DESC
                 LIMIT %(limit)s
@@ -796,24 +787,16 @@ class ClickHouseRepository:
             raise ValueError(f"Unsupported group_by value: {group_by}")
         expr, label = groupings[group_by]
         if group_by in {"finding_code", "severity"}:
+            source_column = "finding_code" if group_by == "finding_code" else "severity"
             rows = self.client.query(
                 f"""
-                SELECT grouping_value, count() AS count
-                FROM
-                (
-                    SELECT DISTINCT
-                        c.cert_hash,
-                        {expr} AS grouping_value
-                    FROM {self._qualified("observations")} AS o
-                    INNER JOIN (SELECT * FROM {self._qualified("certificates")} FINAL) AS c
-                        ON c.cert_hash = o.cert_hash
-                    LEFT JOIN {self._qualified("cert_findings")} AS f
-                        ON f.cert_hash = c.cert_hash
-                    WHERE o.seen_at >= %(start)s
-                      AND o.seen_at < %(end)s
-                      AND f.created_at >= %(start)s
-                      AND f.created_at < %(end)s
-                )
+                SELECT
+                    {source_column} AS grouping_value,
+                    uniqExact(cert_hash) AS count
+                FROM {self._qualified("cert_findings")}
+                WHERE created_at >= %(start)s
+                  AND created_at < %(end)s
+                  AND {source_column} != ''
                 GROUP BY grouping_value
                 ORDER BY count DESC
                 LIMIT %(limit)s
