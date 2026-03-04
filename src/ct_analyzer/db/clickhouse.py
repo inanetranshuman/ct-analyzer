@@ -624,7 +624,11 @@ class ClickHouseRepository:
                     SELECT
                         cert_hash,
                         {expr} AS grouping_value
-                    FROM {self._qualified("certificates")} FINAL AS c
+                    FROM
+                    (
+                        SELECT *
+                        FROM {self._qualified("certificates")} FINAL
+                    ) AS c
                     WHERE c.last_seen >= %(cutoff)s
                 )
                 GROUP BY grouping_value
@@ -734,7 +738,11 @@ class ClickHouseRepository:
                     SELECT
                         cert_hash,
                         {expr} AS grouping_value
-                    FROM {self._qualified("certificates")} FINAL AS c
+                    FROM
+                    (
+                        SELECT *
+                        FROM {self._qualified("certificates")} FINAL
+                    ) AS c
                     WHERE c.last_seen >= %(start)s
                       AND c.last_seen < %(end)s
                 )

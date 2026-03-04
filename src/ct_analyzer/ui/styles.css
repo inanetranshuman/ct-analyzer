@@ -261,7 +261,7 @@ select:disabled {
 
 .metric-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
   gap: 14px;
 }
 
@@ -289,11 +289,13 @@ select:disabled {
 
 .metric-value {
   margin: 0;
-  font-size: clamp(1.2rem, 1rem + 1.2vw, 1.85rem);
+  font-size: clamp(1.08rem, 0.92rem + 0.9vw, 1.55rem);
   font-weight: 700;
   line-height: 1.1;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .two-column {
