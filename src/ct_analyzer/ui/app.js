@@ -143,7 +143,11 @@ function formatShare(count, total) {
   if (!count || !total) {
     return "No recent support";
   }
-  return `${numberFormat(count)} certs · ${percentFormat(count / total)}`;
+  let percent = (count / total) * 100;
+  if (count !== total && percent >= 99.995) {
+    percent = 99.99;
+  }
+  return `${numberFormat(count)} certs · ${percent.toFixed(2)}%`;
 }
 
 function dominantValidationType(aggregatedCounts) {

@@ -409,7 +409,7 @@ class ClickHouseRepository:
         summary_row = self.client.query(
             f"""
             SELECT
-                count() AS cert_count,
+                uniqExact(cert_hash) AS cert_count,
                 quantileTDigest(0.5)(validity_days) AS validity_p50,
                 quantileTDigest(0.95)(validity_days) AS validity_p95,
                 quantileTDigest(0.5)(san_count) AS san_count_p50,
@@ -433,7 +433,7 @@ class ClickHouseRepository:
 
         top_sig_algs = _top_rows(
             f"""
-            SELECT sig_alg, count() AS count
+            SELECT sig_alg, uniqExact(cert_hash) AS count
             FROM {self._qualified("certificates")}
             WHERE last_seen >= %(cutoff)s
             GROUP BY sig_alg
@@ -443,7 +443,7 @@ class ClickHouseRepository:
         )
         top_key_types = _top_rows(
             f"""
-            SELECT key_type, count() AS count
+            SELECT key_type, uniqExact(cert_hash) AS count
             FROM {self._qualified("certificates")}
             WHERE last_seen >= %(cutoff)s
             GROUP BY key_type
@@ -453,7 +453,7 @@ class ClickHouseRepository:
         )
         top_key_sizes = _top_rows(
             f"""
-            SELECT toString(key_size), count() AS count
+            SELECT toString(key_size), uniqExact(cert_hash) AS count
             FROM {self._qualified("certificates")}
             WHERE last_seen >= %(cutoff)s
             GROUP BY key_size
@@ -465,7 +465,7 @@ class ClickHouseRepository:
             f"""
             SELECT
                 eku_set,
-                count() AS count
+                uniqExact(cert_hash) AS count
             FROM
             (
                 SELECT
@@ -481,10 +481,11 @@ class ClickHouseRepository:
         )
         top_validation_types = _top_rows(
             f"""
-            SELECT validation_type, count() AS count
+            SELECT validation_type, uniqExact(cert_hash) AS count
             FROM
             (
                 SELECT {self._validation_type_expr(None)} AS validation_type
+                    , cert_hash
                 FROM {self._qualified("certificates")}
                 WHERE last_seen >= %(cutoff)s
             )
@@ -527,7 +528,7 @@ class ClickHouseRepository:
         summary_row = self.client.query(
             f"""
             SELECT
-                count() AS cert_count,
+                uniqExact(cert_hash) AS cert_count,
                 quantileTDigest(0.5)(validity_days) AS validity_p50,
                 quantileTDigest(0.95)(validity_days) AS validity_p95,
                 quantileTDigest(0.5)(san_count) AS san_count_p50,
@@ -552,7 +553,7 @@ class ClickHouseRepository:
 
         top_sig_algs = _top_rows(
             f"""
-            SELECT sig_alg, count() AS count
+            SELECT sig_alg, uniqExact(cert_hash) AS count
             FROM {self._qualified("certificates")}
             WHERE last_seen >= %(start)s
               AND last_seen < %(end)s
@@ -563,7 +564,7 @@ class ClickHouseRepository:
         )
         top_key_types = _top_rows(
             f"""
-            SELECT key_type, count() AS count
+            SELECT key_type, uniqExact(cert_hash) AS count
             FROM {self._qualified("certificates")}
             WHERE last_seen >= %(start)s
               AND last_seen < %(end)s
@@ -574,7 +575,7 @@ class ClickHouseRepository:
         )
         top_key_sizes = _top_rows(
             f"""
-            SELECT toString(key_size), count() AS count
+            SELECT toString(key_size), uniqExact(cert_hash) AS count
             FROM {self._qualified("certificates")}
             WHERE last_seen >= %(start)s
               AND last_seen < %(end)s
@@ -587,7 +588,7 @@ class ClickHouseRepository:
             f"""
             SELECT
                 eku_set,
-                count() AS count
+                uniqExact(cert_hash) AS count
             FROM
             (
                 SELECT
@@ -604,10 +605,11 @@ class ClickHouseRepository:
         )
         top_validation_types = _top_rows(
             f"""
-            SELECT validation_type, count() AS count
+            SELECT validation_type, uniqExact(cert_hash) AS count
             FROM
             (
                 SELECT {self._validation_type_expr(None)} AS validation_type
+                    , cert_hash
                 FROM {self._qualified("certificates")}
                 WHERE last_seen >= %(start)s
                   AND last_seen < %(end)s
