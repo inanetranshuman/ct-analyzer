@@ -165,7 +165,15 @@ def _rescore_anomalies(repository: ClickHouseRepository, days: int, limit: int, 
         issuer_key_value = issuer_key(metadata.issuer_dn, metadata.issuer_spki_hash)
         baseline = baseline_cache.get(issuer_key_value)
         if baseline is None:
-            baseline = repository.fetch_issuer_baseline(issuer_key_value, days)
+            try:
+                baseline = repository.fetch_issuer_baseline(issuer_key_value, days)
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Baseline fetch failed for issuer_key=%s during rescore; continuing without baseline signals",
+                    issuer_key_value,
+                    exc_info=True,
+                )
+                baseline = None
             baseline_cache[issuer_key_value] = baseline
 
         registered_domains = sorted({get_registered_domain(name) for name in metadata.dns_names if name})
