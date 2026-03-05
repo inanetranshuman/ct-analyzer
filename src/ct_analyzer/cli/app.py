@@ -177,10 +177,18 @@ def _rescore_anomalies(repository: ClickHouseRepository, days: int, limit: int, 
             baseline_cache[issuer_key_value] = baseline
 
         registered_domains = sorted({get_registered_domain(name) for name in metadata.dns_names if name})
-        domain_burst_counts = repository.fetch_registered_domain_burst_counts(
-            registered_domains,
-            repository.settings.anomaly_thresholds.domain_burst_window_hours,
-        )
+        try:
+            domain_burst_counts = repository.fetch_registered_domain_burst_counts(
+                registered_domains,
+                repository.settings.anomaly_thresholds.domain_burst_window_hours,
+            )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Domain burst lookup failed during rescore for cert_hash=%s; continuing without domain-burst signal",
+                metadata.cert_hash,
+                exc_info=True,
+            )
+            domain_burst_counts = {}
         _, _, anomaly_finding = analyze_certificate(
             metadata,
             repository.settings,
