@@ -4,7 +4,8 @@ const state = {
   sessionAuthenticated: false,
   loading: false,
 };
-const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_TIMEOUT_MS = 20000;
+const CORE_REQUEST_TIMEOUT_MS = 60000;
 
 const SIGNAL_DESCRIPTIONS = {
   high_san_count: "This certificate has an unusually large number of SAN entries compared with normal leaf certificates.",
@@ -63,9 +64,10 @@ function authHeaders() {
   return {};
 }
 
-async function fetchJson(path) {
+async function fetchJson(path, options = {}) {
+  const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   let response;
   try {
     response = await fetch(path, {
@@ -468,9 +470,11 @@ async function refreshDashboard() {
   setAuthStatus("Loading data...", "neutral");
   try {
     const coreResults = await Promise.allSettled([
-      fetchJson(`/stats/issuer/godaddy?days=${state.days}`),
-      fetchJson(`/profile/issuer/godaddy?days=${state.days}`),
-      fetchJson(`/breakdown/issuer/godaddy?group_by=${encodeURIComponent(state.groupBy)}&days=${state.days}&limit=12`),
+      fetchJson(`/stats/issuer/godaddy?days=${state.days}`, { timeoutMs: CORE_REQUEST_TIMEOUT_MS }),
+      fetchJson(`/profile/issuer/godaddy?days=${state.days}`, { timeoutMs: CORE_REQUEST_TIMEOUT_MS }),
+      fetchJson(`/breakdown/issuer/godaddy?group_by=${encodeURIComponent(state.groupBy)}&days=${state.days}&limit=12`, {
+        timeoutMs: CORE_REQUEST_TIMEOUT_MS,
+      }),
     ]);
     const [statsResult, profileResult, breakdownResult] = coreResults;
 
