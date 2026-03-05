@@ -861,44 +861,36 @@ class ClickHouseRepository:
         cert_rows = self.client.query(
             f"""
             SELECT
-                cert_hash,
-                subject_cn,
-                dns_names,
-                anomaly_score,
-                last_seen
-            FROM {self._qualified("certificates")} FINAL
-            WHERE last_seen >= %(cutoff)s
-              AND anomaly_score > 0
+                c.cert_hash,
+                c.subject_cn,
+                c.dns_names,
+                JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') AS anomaly_score,
+                c.last_seen,
+                anomaly.evidence_json
+            FROM
+            (
+                SELECT
+                    cert_hash,
+                    evidence_json,
+                    created_at,
+                    row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
+                FROM {self._qualified("cert_findings")}
+                WHERE finding_code = 'ANOMALY_SCORE'
+                  AND created_at >= %(cutoff)s
+            ) AS anomaly
+            INNER JOIN {self._qualified("certificates")} AS c
+                ON c.cert_hash = anomaly.cert_hash
+            WHERE anomaly.row_num = 1
+              AND c.last_seen >= %(cutoff)s
+              AND JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') > 0
             ORDER BY anomaly_score DESC, last_seen DESC
             LIMIT %(limit)s
             """,
             parameters={"cutoff": cutoff, "limit": limit},
         ).result_rows
         cert_hashes = [str(row[0]) for row in cert_rows]
-        anomaly_evidence_by_hash: dict[str, dict[str, Any]] = {}
         if cert_hashes:
             quoted_hashes = self._quoted_string_list(cert_hashes)
-            anomaly_rows = self.client.query(
-                f"""
-                SELECT cert_hash, evidence_json
-                FROM
-                (
-                    SELECT
-                        cert_hash,
-                        evidence_json,
-                        created_at,
-                        row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
-                    FROM {self._qualified("cert_findings")}
-                    WHERE finding_code = 'ANOMALY_SCORE'
-                      AND cert_hash IN ({quoted_hashes})
-                )
-                WHERE row_num = 1
-                """
-            ).result_rows
-            anomaly_evidence_by_hash = {
-                str(cert_hash): json.loads(evidence_json) if evidence_json else {"top_signals": []}
-                for cert_hash, evidence_json in anomaly_rows
-            }
             finding_rows = self.client.query(
                 f"""
                 SELECT cert_hash, severity, count() AS count
@@ -917,8 +909,8 @@ class ClickHouseRepository:
             severity_counts[str(cert_hash)][str(severity)] = int(count)
 
         results: list[dict[str, Any]] = []
-        for cert_hash, subject_cn, dns_names, anomaly_score, _last_seen in cert_rows:
-            evidence = anomaly_evidence_by_hash.get(str(cert_hash), {"top_signals": []})
+        for cert_hash, subject_cn, dns_names, anomaly_score, _last_seen, evidence_json in cert_rows:
+            evidence = json.loads(evidence_json) if evidence_json else {"top_signals": []}
             dns_name_list = list(dns_names)[:5]
             results.append(
                 {
@@ -939,45 +931,38 @@ class ClickHouseRepository:
         cert_rows = self.client.query(
             f"""
             SELECT
-                cert_hash,
-                subject_cn,
-                dns_names,
-                anomaly_score,
-                last_seen
-            FROM {self._qualified("certificates")} FINAL
-            WHERE last_seen >= %(start)s
-              AND last_seen < %(end)s
-              AND anomaly_score > 0
+                c.cert_hash,
+                c.subject_cn,
+                c.dns_names,
+                JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') AS anomaly_score,
+                c.last_seen,
+                anomaly.evidence_json
+            FROM
+            (
+                SELECT
+                    cert_hash,
+                    evidence_json,
+                    created_at,
+                    row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
+                FROM {self._qualified("cert_findings")}
+                WHERE finding_code = 'ANOMALY_SCORE'
+                  AND created_at >= %(start)s
+                  AND created_at < %(end)s
+            ) AS anomaly
+            INNER JOIN {self._qualified("certificates")} AS c
+                ON c.cert_hash = anomaly.cert_hash
+            WHERE anomaly.row_num = 1
+              AND c.last_seen >= %(start)s
+              AND c.last_seen < %(end)s
+              AND JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') > 0
             ORDER BY anomaly_score DESC, last_seen DESC
             LIMIT %(limit)s
             """,
             parameters={"start": start, "end": end, "limit": limit},
         ).result_rows
         cert_hashes = [str(row[0]) for row in cert_rows]
-        anomaly_evidence_by_hash: dict[str, dict[str, Any]] = {}
         if cert_hashes:
             quoted_hashes = self._quoted_string_list(cert_hashes)
-            anomaly_rows = self.client.query(
-                f"""
-                SELECT cert_hash, evidence_json
-                FROM
-                (
-                    SELECT
-                        cert_hash,
-                        evidence_json,
-                        created_at,
-                        row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
-                    FROM {self._qualified("cert_findings")}
-                    WHERE finding_code = 'ANOMALY_SCORE'
-                      AND cert_hash IN ({quoted_hashes})
-                )
-                WHERE row_num = 1
-                """
-            ).result_rows
-            anomaly_evidence_by_hash = {
-                str(cert_hash): json.loads(evidence_json) if evidence_json else {"top_signals": []}
-                for cert_hash, evidence_json in anomaly_rows
-            }
             finding_rows = self.client.query(
                 f"""
                 SELECT cert_hash, severity, count() AS count
@@ -997,8 +982,8 @@ class ClickHouseRepository:
             severity_counts[str(cert_hash)][str(severity)] = int(count)
 
         results: list[dict[str, Any]] = []
-        for cert_hash, subject_cn, dns_names, anomaly_score, _last_seen in cert_rows:
-            evidence = anomaly_evidence_by_hash.get(str(cert_hash), {"top_signals": []})
+        for cert_hash, subject_cn, dns_names, anomaly_score, _last_seen, evidence_json in cert_rows:
+            evidence = json.loads(evidence_json) if evidence_json else {"top_signals": []}
             dns_name_list = list(dns_names)[:5]
             results.append(
                 {

@@ -72,6 +72,7 @@ python -m ct_analyzer ingest
 python -m ct_analyzer rollup --days 30
 python -m ct_analyzer query-issuer-stats --issuer godaddy --days 30
 python -m ct_analyzer query-anomalies --issuer godaddy --days 7 --limit 50
+python -m ct_analyzer rescore-anomalies --days 30 --limit 50000
 python -m ct_analyzer api
 python -m ct_analyzer mcp
 ```
