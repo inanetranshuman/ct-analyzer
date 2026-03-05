@@ -487,6 +487,7 @@ async function refreshDashboard() {
 
     let loadedSections = 0;
     let failedSections = 0;
+    const failedLabels = [];
 
     if (statsResult.status === "fulfilled") {
       renderMetricCards(statsResult.value.aggregated_counts);
@@ -494,6 +495,7 @@ async function refreshDashboard() {
     } else {
       renderPanelError(els.metricCards, "Could not load issuance snapshot.");
       failedSections += 1;
+      failedLabels.push("issuance snapshot");
     }
 
     if (profileResult.status === "fulfilled") {
@@ -514,6 +516,7 @@ async function refreshDashboard() {
       renderPanelError(els.findingList, "Could not load common findings.");
       renderPanelError(els.ekuList, "Could not load EKU patterns.");
       failedSections += 1;
+      failedLabels.push("issuer profile");
     }
 
     if (breakdownResult.status === "fulfilled") {
@@ -522,6 +525,7 @@ async function refreshDashboard() {
     } else {
       renderPanelError(els.breakdownTable, `Could not load ${state.groupBy} breakdown.`);
       failedSections += 1;
+      failedLabels.push(`${state.groupBy} breakdown`);
     }
 
     if (failedSections === 0 && profileResult.status === "fulfilled") {
@@ -531,7 +535,7 @@ async function refreshDashboard() {
       );
     } else if (loadedSections > 0) {
       setAuthStatus(
-        `Loaded ${loadedSections} sections. ${failedSections} section${failedSections === 1 ? "" : "s"} could not be loaded.`,
+        `Loaded ${loadedSections} sections. Failed: ${failedLabels.join(", ") || `${failedSections} section${failedSections === 1 ? "" : "s"}`}.`,
         "error",
       );
     } else {

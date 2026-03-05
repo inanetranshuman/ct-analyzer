@@ -858,39 +858,83 @@ class ClickHouseRepository:
 
     def query_anomalies(self, days: int, limit: int) -> list[dict[str, Any]]:
         cutoff = datetime.now(tz=UTC) - timedelta(days=days)
-        cert_rows = self.client.query(
-            f"""
-            SELECT
-                c.cert_hash,
-                c.subject_cn,
-                c.dns_names,
-                JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') AS anomaly_score,
-                c.last_seen,
-                anomaly.evidence_json
-            FROM
-            (
+        try:
+            cert_rows = self.client.query(
+                f"""
+                SELECT
+                    c.cert_hash,
+                    c.subject_cn,
+                    c.dns_names,
+                    JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') AS anomaly_score,
+                    c.last_seen,
+                    anomaly.evidence_json
+                FROM
+                (
+                    SELECT
+                        cert_hash,
+                        evidence_json,
+                        created_at,
+                        row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
+                    FROM {self._qualified("cert_findings")}
+                    WHERE finding_code = 'ANOMALY_SCORE'
+                      AND created_at >= %(cutoff)s
+                ) AS anomaly
+                INNER JOIN {self._qualified("certificates")} AS c
+                    ON c.cert_hash = anomaly.cert_hash
+                WHERE anomaly.row_num = 1
+                  AND c.last_seen >= %(cutoff)s
+                  AND JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') > 0
+                ORDER BY anomaly_score DESC, last_seen DESC
+                LIMIT %(limit)s
+                """,
+                parameters={"cutoff": cutoff, "limit": limit},
+            ).result_rows
+        except Exception as exc:
+            if "MEMORY_LIMIT_EXCEEDED" not in str(exc):
+                raise
+            LOGGER.warning("Primary anomaly query exceeded memory; using certificate-score fallback.")
+            cert_rows = self.client.query(
+                f"""
                 SELECT
                     cert_hash,
-                    evidence_json,
-                    created_at,
-                    row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
-                FROM {self._qualified("cert_findings")}
-                WHERE finding_code = 'ANOMALY_SCORE'
-                  AND created_at >= %(cutoff)s
-            ) AS anomaly
-            INNER JOIN {self._qualified("certificates")} AS c
-                ON c.cert_hash = anomaly.cert_hash
-            WHERE anomaly.row_num = 1
-              AND c.last_seen >= %(cutoff)s
-              AND JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') > 0
-            ORDER BY anomaly_score DESC, last_seen DESC
-            LIMIT %(limit)s
-            """,
-            parameters={"cutoff": cutoff, "limit": limit},
-        ).result_rows
+                    subject_cn,
+                    dns_names,
+                    anomaly_score,
+                    last_seen,
+                    '' AS evidence_json
+                FROM {self._qualified("certificates")}
+                WHERE last_seen >= %(cutoff)s
+                  AND anomaly_score > 0
+                ORDER BY anomaly_score DESC, last_seen DESC
+                LIMIT %(limit)s
+                """,
+                parameters={"cutoff": cutoff, "limit": limit},
+            ).result_rows
         cert_hashes = [str(row[0]) for row in cert_rows]
+        anomaly_evidence_by_hash: dict[str, dict[str, Any]] = {}
         if cert_hashes:
             quoted_hashes = self._quoted_string_list(cert_hashes)
+            anomaly_rows = self.client.query(
+                f"""
+                SELECT cert_hash, evidence_json
+                FROM
+                (
+                    SELECT
+                        cert_hash,
+                        evidence_json,
+                        created_at,
+                        row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
+                    FROM {self._qualified("cert_findings")}
+                    WHERE finding_code = 'ANOMALY_SCORE'
+                      AND cert_hash IN ({quoted_hashes})
+                )
+                WHERE row_num = 1
+                """
+            ).result_rows
+            anomaly_evidence_by_hash = {
+                str(cert_hash): json.loads(evidence_json) if evidence_json else {"top_signals": []}
+                for cert_hash, evidence_json in anomaly_rows
+            }
             finding_rows = self.client.query(
                 f"""
                 SELECT cert_hash, severity, count() AS count
@@ -910,7 +954,9 @@ class ClickHouseRepository:
 
         results: list[dict[str, Any]] = []
         for cert_hash, subject_cn, dns_names, anomaly_score, _last_seen, evidence_json in cert_rows:
-            evidence = json.loads(evidence_json) if evidence_json else {"top_signals": []}
+            evidence = anomaly_evidence_by_hash.get(str(cert_hash))
+            if evidence is None:
+                evidence = json.loads(evidence_json) if evidence_json else {"top_signals": []}
             dns_name_list = list(dns_names)[:5]
             results.append(
                 {
@@ -928,41 +974,86 @@ class ClickHouseRepository:
 
     def query_anomalies_range(self, date_from: date, date_to: date, limit: int) -> list[dict[str, Any]]:
         start, end = self._range_bounds(date_from, date_to)
-        cert_rows = self.client.query(
-            f"""
-            SELECT
-                c.cert_hash,
-                c.subject_cn,
-                c.dns_names,
-                JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') AS anomaly_score,
-                c.last_seen,
-                anomaly.evidence_json
-            FROM
-            (
+        try:
+            cert_rows = self.client.query(
+                f"""
+                SELECT
+                    c.cert_hash,
+                    c.subject_cn,
+                    c.dns_names,
+                    JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') AS anomaly_score,
+                    c.last_seen,
+                    anomaly.evidence_json
+                FROM
+                (
+                    SELECT
+                        cert_hash,
+                        evidence_json,
+                        created_at,
+                        row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
+                    FROM {self._qualified("cert_findings")}
+                    WHERE finding_code = 'ANOMALY_SCORE'
+                      AND created_at >= %(start)s
+                      AND created_at < %(end)s
+                ) AS anomaly
+                INNER JOIN {self._qualified("certificates")} AS c
+                    ON c.cert_hash = anomaly.cert_hash
+                WHERE anomaly.row_num = 1
+                  AND c.last_seen >= %(start)s
+                  AND c.last_seen < %(end)s
+                  AND JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') > 0
+                ORDER BY anomaly_score DESC, last_seen DESC
+                LIMIT %(limit)s
+                """,
+                parameters={"start": start, "end": end, "limit": limit},
+            ).result_rows
+        except Exception as exc:
+            if "MEMORY_LIMIT_EXCEEDED" not in str(exc):
+                raise
+            LOGGER.warning("Primary anomaly range query exceeded memory; using certificate-score fallback.")
+            cert_rows = self.client.query(
+                f"""
                 SELECT
                     cert_hash,
-                    evidence_json,
-                    created_at,
-                    row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
-                FROM {self._qualified("cert_findings")}
-                WHERE finding_code = 'ANOMALY_SCORE'
-                  AND created_at >= %(start)s
-                  AND created_at < %(end)s
-            ) AS anomaly
-            INNER JOIN {self._qualified("certificates")} AS c
-                ON c.cert_hash = anomaly.cert_hash
-            WHERE anomaly.row_num = 1
-              AND c.last_seen >= %(start)s
-              AND c.last_seen < %(end)s
-              AND JSONExtractUInt(anomaly.evidence_json, 'anomaly_score') > 0
-            ORDER BY anomaly_score DESC, last_seen DESC
-            LIMIT %(limit)s
-            """,
-            parameters={"start": start, "end": end, "limit": limit},
-        ).result_rows
+                    subject_cn,
+                    dns_names,
+                    anomaly_score,
+                    last_seen,
+                    '' AS evidence_json
+                FROM {self._qualified("certificates")}
+                WHERE last_seen >= %(start)s
+                  AND last_seen < %(end)s
+                  AND anomaly_score > 0
+                ORDER BY anomaly_score DESC, last_seen DESC
+                LIMIT %(limit)s
+                """,
+                parameters={"start": start, "end": end, "limit": limit},
+            ).result_rows
         cert_hashes = [str(row[0]) for row in cert_rows]
+        anomaly_evidence_by_hash: dict[str, dict[str, Any]] = {}
         if cert_hashes:
             quoted_hashes = self._quoted_string_list(cert_hashes)
+            anomaly_rows = self.client.query(
+                f"""
+                SELECT cert_hash, evidence_json
+                FROM
+                (
+                    SELECT
+                        cert_hash,
+                        evidence_json,
+                        created_at,
+                        row_number() OVER (PARTITION BY cert_hash ORDER BY created_at DESC) AS row_num
+                    FROM {self._qualified("cert_findings")}
+                    WHERE finding_code = 'ANOMALY_SCORE'
+                      AND cert_hash IN ({quoted_hashes})
+                )
+                WHERE row_num = 1
+                """
+            ).result_rows
+            anomaly_evidence_by_hash = {
+                str(cert_hash): json.loads(evidence_json) if evidence_json else {"top_signals": []}
+                for cert_hash, evidence_json in anomaly_rows
+            }
             finding_rows = self.client.query(
                 f"""
                 SELECT cert_hash, severity, count() AS count
@@ -983,7 +1074,9 @@ class ClickHouseRepository:
 
         results: list[dict[str, Any]] = []
         for cert_hash, subject_cn, dns_names, anomaly_score, _last_seen, evidence_json in cert_rows:
-            evidence = json.loads(evidence_json) if evidence_json else {"top_signals": []}
+            evidence = anomaly_evidence_by_hash.get(str(cert_hash))
+            if evidence is None:
+                evidence = json.loads(evidence_json) if evidence_json else {"top_signals": []}
             dns_name_list = list(dns_names)[:5]
             results.append(
                 {
