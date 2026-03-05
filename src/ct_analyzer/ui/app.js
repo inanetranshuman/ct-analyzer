@@ -146,8 +146,22 @@ function formatShare(count, total) {
   return `${numberFormat(count)} certs · ${percentFormat(count / total)}`;
 }
 
-function renderIssuanceTemplates(profile) {
+function dominantValidationType(aggregatedCounts) {
+  if (!aggregatedCounts) {
+    return null;
+  }
+  const candidates = [
+    { value: "DV", count: Number(aggregatedCounts.dv_count || 0) },
+    { value: "OV", count: Number(aggregatedCounts.ov_count || 0) },
+    { value: "EV", count: Number(aggregatedCounts.ev_count || 0) },
+    { value: "Unknown", count: Number(aggregatedCounts.unknown_validation_count || 0) },
+  ];
+  return candidates.sort((a, b) => b.count - a.count)[0];
+}
+
+function renderIssuanceTemplates(profile, aggregatedCounts) {
   clearNode(els.issuanceTemplates);
+  const dominantValidation = dominantValidationType(aggregatedCounts);
   const templates = [
     {
       attribute: "Signature Algorithm",
@@ -171,8 +185,11 @@ function renderIssuanceTemplates(profile) {
     },
     {
       attribute: "Validation Type",
-      value: profile.top_validation_types?.[0]?.value || "Unknown",
-      support: formatShare(profile.top_validation_types?.[0]?.count, profile.cert_count),
+      value: dominantValidation?.value || profile.top_validation_types?.[0]?.value || "Unknown",
+      support: formatShare(
+        dominantValidation?.count ?? profile.top_validation_types?.[0]?.count,
+        profile.cert_count,
+      ),
     },
     {
       attribute: "Validity Pattern",
@@ -245,6 +262,20 @@ function renderFindingList(items) {
       value: formatFindingCode(item.value),
     })),
   );
+}
+
+function isoDate(value) {
+  return value.toISOString().slice(0, 10);
+}
+
+function reportDateRange(days) {
+  const end = new Date();
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+  return {
+    dateFrom: isoDate(start),
+    dateTo: isoDate(end),
+  };
 }
 
 function renderBreakdown(payload) {
@@ -465,7 +496,7 @@ async function refreshDashboard() {
       const profile = profileResult.value;
       renderMiniStats(els.validityStats, profile.validity_days);
       renderMiniStats(els.sanStats, profile.san_count);
-      renderIssuanceTemplates(profile);
+      renderIssuanceTemplates(profile, statsResult.status === "fulfilled" ? statsResult.value.aggregated_counts : null);
       renderRankList(els.sigAlgList, profile.top_signature_algorithms);
       renderRankList(els.keyTypeList, profile.top_key_types);
       renderRankList(els.ekuList, profile.top_eku_sets);
@@ -507,8 +538,20 @@ async function refreshDashboard() {
       .then((payload) => {
         renderFindingList(payload.buckets);
       })
-      .catch(() => {
-        renderPanelError(els.findingList, "Could not load common findings.");
+      .catch(async () => {
+        const range = reportDateRange(state.days);
+        try {
+          const summary = await fetchJson(
+            `/reports/issuer/godaddy/findings-summary?date_from=${range.dateFrom}&date_to=${range.dateTo}&limit=5`,
+          );
+          const buckets = (summary.top_findings || []).map((item) => ({
+            value: item.finding_code,
+            count: item.cert_count,
+          }));
+          renderFindingList(buckets);
+        } catch {
+          renderPanelError(els.findingList, "Could not load common findings.");
+        }
       });
 
     void fetchJson(`/anomalies/issuer/godaddy?days=${Math.min(state.days, 14)}&limit=12`)
