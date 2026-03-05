@@ -217,6 +217,28 @@ AUTH_ENABLED=true
 API_KEYS=replace-with-a-long-random-key
 ```
 
+### ClickHouse Log Retention
+
+By default, ClickHouse system log tables can grow quickly (`system.text_log`, `system.trace_log`, `system.query_log`, and `system.processors_profile_log`).
+
+This repo includes `clickhouse/config.d/system-log-retention.xml` and mounts it into the ClickHouse container to bound retention with TTLs.
+
+Apply it by restarting ClickHouse:
+
+```bash
+docker compose up -d --force-recreate clickhouse
+```
+
+If you already accumulated large system log tables, you can reclaim space:
+
+```bash
+docker compose exec clickhouse clickhouse-client --query "TRUNCATE TABLE system.text_log"
+docker compose exec clickhouse clickhouse-client --query "TRUNCATE TABLE system.trace_log"
+docker compose exec clickhouse clickhouse-client --query "TRUNCATE TABLE system.processors_profile_log"
+docker compose exec clickhouse clickhouse-client --query "TRUNCATE TABLE system.query_log"
+docker compose exec clickhouse clickhouse-client --query "TRUNCATE TABLE system.part_log"
+```
+
 When auth is enabled, send either:
 
 - `Authorization: Bearer <key>`

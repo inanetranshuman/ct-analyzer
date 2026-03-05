@@ -10,6 +10,7 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
     volumes:
       - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/config.d/system-log-retention.xml:/etc/clickhouse-server/config.d/system-log-retention.xml:ro
 
   certstream:
     image: 0rickyy0/certstream-server-go:latest

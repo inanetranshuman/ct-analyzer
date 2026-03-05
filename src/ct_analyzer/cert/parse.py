@@ -3,20 +3,40 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import warnings
 from datetime import UTC, datetime
 from typing import Any
 
 from cryptography import x509
+from cryptography.utils import CryptographyDeprecationWarning
 
 from ct_analyzer.config import IssuerMatchingSettings
 
 
 def load_certificate_from_der(der_bytes: bytes) -> x509.Certificate:
-    return x509.load_der_x509_certificate(der_bytes)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "error",
+            message="Parsed a serial number which wasn't positive*",
+            category=CryptographyDeprecationWarning,
+        )
+        try:
+            return x509.load_der_x509_certificate(der_bytes)
+        except CryptographyDeprecationWarning as exc:
+            raise ValueError("Rejected certificate with non-positive serial number") from exc
 
 
 def load_certificate_from_pem(pem_bytes: bytes) -> x509.Certificate:
-    return x509.load_pem_x509_certificate(pem_bytes)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "error",
+            message="Parsed a serial number which wasn't positive*",
+            category=CryptographyDeprecationWarning,
+        )
+        try:
+            return x509.load_pem_x509_certificate(pem_bytes)
+        except CryptographyDeprecationWarning as exc:
+            raise ValueError("Rejected certificate with non-positive serial number") from exc
 
 
 def parse_certstream_message(raw_message: str) -> dict[str, Any]:

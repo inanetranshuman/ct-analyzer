@@ -1,0 +1,109 @@
+<clickhouse>
+  <query_log replace="1">
+    <database>system</database>
+    <table>query_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 7 DAY
+    </engine>
+  </query_log>
+
+  <query_thread_log replace="1">
+    <database>system</database>
+    <table>query_thread_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 7 DAY
+    </engine>
+  </query_thread_log>
+
+  <query_metric_log replace="1">
+    <database>system</database>
+    <table>query_metric_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 7 DAY
+    </engine>
+  </query_metric_log>
+
+  <part_log replace="1">
+    <database>system</database>
+    <table>part_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 7 DAY
+    </engine>
+  </part_log>
+
+  <text_log replace="1">
+    <database>system</database>
+    <table>text_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 2 DAY
+    </engine>
+  </text_log>
+
+  <trace_log replace="1">
+    <database>system</database>
+    <table>trace_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 2 DAY
+    </engine>
+  </trace_log>
+
+  <processors_profile_log replace="1">
+    <database>system</database>
+    <table>processors_profile_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 2 DAY
+    </engine>
+  </processors_profile_log>
+
+  <metric_log replace="1">
+    <database>system</database>
+    <table>metric_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 7 DAY
+    </engine>
+  </metric_log>
+
+  <asynchronous_metric_log replace="1">
+    <database>system</database>
+    <table>asynchronous_metric_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    <engine>
+      Engine = MergeTree
+      PARTITION BY toYYYYMM(event_date)
+      ORDER BY event_time
+      TTL event_date + INTERVAL 7 DAY
+    </engine>
+  </asynchronous_metric_log>
+</clickhouse>
