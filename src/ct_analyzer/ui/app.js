@@ -4,6 +4,7 @@ const state = {
   sessionAuthenticated: false,
   loading: false,
 };
+const REQUEST_TIMEOUT_MS = 15000;
 
 const SIGNAL_DESCRIPTIONS = {
   high_san_count: "This certificate has an unusually large number of SAN entries compared with normal leaf certificates.",
@@ -63,13 +64,21 @@ function authHeaders() {
 }
 
 async function fetchJson(path) {
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    headers: {
-      Accept: "application/json",
-      ...authHeaders(),
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(path, {
+      credentials: "same-origin",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        ...authHeaders(),
+      },
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`${response.status} ${response.statusText}: ${text}`);
@@ -423,16 +432,14 @@ async function refreshDashboard() {
   setLoadingState(true);
   setAuthStatus("Loading data...", "neutral");
   try {
-    const results = await Promise.allSettled([
+    const coreResults = await Promise.allSettled([
       fetchJson(`/stats/issuer/godaddy?days=${state.days}`),
       fetchJson(`/profile/issuer/godaddy?days=${state.days}`),
       fetchJson(`/breakdown/issuer/godaddy?group_by=${encodeURIComponent(state.groupBy)}&days=${state.days}&limit=12`),
-      fetchJson(`/breakdown/issuer/godaddy?group_by=finding_code&days=${state.days}&limit=5`),
-      fetchJson(`/anomalies/issuer/godaddy?days=${Math.min(state.days, 14)}&limit=12`),
     ]);
-    const [statsResult, profileResult, breakdownResult, findingsResult, anomaliesResult] = results;
+    const [statsResult, profileResult, breakdownResult] = coreResults;
 
-    const firstError = results.find(
+    const firstError = coreResults.find(
       (result) => result.status === "rejected" && String(result.reason?.message).includes("401"),
     );
     if (firstError) {
@@ -474,27 +481,11 @@ async function refreshDashboard() {
       failedSections += 1;
     }
 
-    if (findingsResult.status === "fulfilled") {
-      renderFindingList(findingsResult.value.buckets);
-      loadedSections += 1;
-    } else if (profileResult.status === "fulfilled") {
-      renderPanelError(els.findingList, "Could not load common findings.");
-      failedSections += 1;
-    }
-
     if (breakdownResult.status === "fulfilled") {
       renderBreakdown(breakdownResult.value);
       loadedSections += 1;
     } else {
       renderPanelError(els.breakdownTable, `Could not load ${state.groupBy} breakdown.`);
-      failedSections += 1;
-    }
-
-    if (anomaliesResult.status === "fulfilled") {
-      renderAnomalies(anomaliesResult.value);
-      loadedSections += 1;
-    } else {
-      renderPanelError(els.anomalyList, "Could not load suspicious certificates for this window.");
       failedSections += 1;
     }
 
@@ -511,6 +502,22 @@ async function refreshDashboard() {
     } else {
       throw new Error("All dashboard queries failed.");
     }
+
+    void fetchJson(`/breakdown/issuer/godaddy?group_by=finding_code&days=${state.days}&limit=5`)
+      .then((payload) => {
+        renderFindingList(payload.buckets);
+      })
+      .catch(() => {
+        renderPanelError(els.findingList, "Could not load common findings.");
+      });
+
+    void fetchJson(`/anomalies/issuer/godaddy?days=${Math.min(state.days, 14)}&limit=12`)
+      .then((payload) => {
+        renderAnomalies(payload);
+      })
+      .catch(() => {
+        renderPanelError(els.anomalyList, "Could not load suspicious certificates for this window.");
+      });
   } catch (error) {
     console.error(error);
     if (String(error.message).includes("401")) {

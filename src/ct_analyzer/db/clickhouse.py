@@ -421,7 +421,7 @@ class ClickHouseRepository:
                 avg(has_email_san) AS email_san_rate,
                 avg(has_must_staple) AS must_staple_rate,
                 avg(basic_constraints_ca) AS ca_true_rate
-            FROM {self._qualified("certificates")} FINAL
+            FROM {self._qualified("certificates")}
             WHERE last_seen >= %(cutoff)s
             """,
             parameters={"cutoff": cutoff},
@@ -434,7 +434,7 @@ class ClickHouseRepository:
         top_sig_algs = _top_rows(
             f"""
             SELECT sig_alg, count() AS count
-            FROM {self._qualified("certificates")} FINAL
+            FROM {self._qualified("certificates")}
             WHERE last_seen >= %(cutoff)s
             GROUP BY sig_alg
             ORDER BY count DESC
@@ -444,7 +444,7 @@ class ClickHouseRepository:
         top_key_types = _top_rows(
             f"""
             SELECT key_type, count() AS count
-            FROM {self._qualified("certificates")} FINAL
+            FROM {self._qualified("certificates")}
             WHERE last_seen >= %(cutoff)s
             GROUP BY key_type
             ORDER BY count DESC
@@ -454,7 +454,7 @@ class ClickHouseRepository:
         top_key_sizes = _top_rows(
             f"""
             SELECT toString(key_size), count() AS count
-            FROM {self._qualified("certificates")} FINAL
+            FROM {self._qualified("certificates")}
             WHERE last_seen >= %(cutoff)s
             GROUP BY key_size
             ORDER BY count DESC
@@ -471,7 +471,7 @@ class ClickHouseRepository:
                 SELECT
                     cert_hash,
                     if(length(eku) = 0, '(none)', arrayStringConcat(arraySort(eku), ',')) AS eku_set
-                FROM {self._qualified("certificates")} FINAL
+                FROM {self._qualified("certificates")}
                 WHERE last_seen >= %(cutoff)s
             )
             GROUP BY eku_set
@@ -485,7 +485,7 @@ class ClickHouseRepository:
             FROM
             (
                 SELECT {self._validation_type_expr(None)} AS validation_type
-                FROM {self._qualified("certificates")} FINAL
+                FROM {self._qualified("certificates")}
                 WHERE last_seen >= %(cutoff)s
             )
             GROUP BY validation_type
@@ -539,7 +539,7 @@ class ClickHouseRepository:
                 avg(has_email_san) AS email_san_rate,
                 avg(has_must_staple) AS must_staple_rate,
                 avg(basic_constraints_ca) AS ca_true_rate
-            FROM {self._qualified("certificates")} FINAL
+            FROM {self._qualified("certificates")}
             WHERE last_seen >= %(start)s
               AND last_seen < %(end)s
             """,
@@ -553,7 +553,7 @@ class ClickHouseRepository:
         top_sig_algs = _top_rows(
             f"""
             SELECT sig_alg, count() AS count
-            FROM {self._qualified("certificates")} FINAL
+            FROM {self._qualified("certificates")}
             WHERE last_seen >= %(start)s
               AND last_seen < %(end)s
             GROUP BY sig_alg
@@ -564,7 +564,7 @@ class ClickHouseRepository:
         top_key_types = _top_rows(
             f"""
             SELECT key_type, count() AS count
-            FROM {self._qualified("certificates")} FINAL
+            FROM {self._qualified("certificates")}
             WHERE last_seen >= %(start)s
               AND last_seen < %(end)s
             GROUP BY key_type
@@ -575,7 +575,7 @@ class ClickHouseRepository:
         top_key_sizes = _top_rows(
             f"""
             SELECT toString(key_size), count() AS count
-            FROM {self._qualified("certificates")} FINAL
+            FROM {self._qualified("certificates")}
             WHERE last_seen >= %(start)s
               AND last_seen < %(end)s
             GROUP BY key_size
@@ -593,7 +593,7 @@ class ClickHouseRepository:
                 SELECT
                     cert_hash,
                     if(length(eku) = 0, '(none)', arrayStringConcat(arraySort(eku), ',')) AS eku_set
-                FROM {self._qualified("certificates")} FINAL
+                FROM {self._qualified("certificates")}
                 WHERE last_seen >= %(start)s
                   AND last_seen < %(end)s
             )
@@ -608,7 +608,7 @@ class ClickHouseRepository:
             FROM
             (
                 SELECT {self._validation_type_expr(None)} AS validation_type
-                FROM {self._qualified("certificates")} FINAL
+                FROM {self._qualified("certificates")}
                 WHERE last_seen >= %(start)s
                   AND last_seen < %(end)s
             )
