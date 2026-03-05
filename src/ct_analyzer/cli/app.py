@@ -59,10 +59,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Recompute for all certs in the window instead of only currently non-zero anomaly scores.",
     )
+    rescore.add_argument(
+        "--fast",
+        action="store_true",
+        help="Skip baseline and domain-burst lookups during rescore to reduce ClickHouse load.",
+    )
     return parser
 
 
-def _rescore_anomalies(repository: ClickHouseRepository, days: int, limit: int, all_certs: bool) -> None:
+def _rescore_anomalies(
+    repository: ClickHouseRepository,
+    days: int,
+    limit: int,
+    all_certs: bool,
+    fast: bool,
+) -> None:
     cutoff = datetime.now(tz=UTC) - timedelta(days=days)
     score_filter = "" if all_certs else "AND anomaly_score > 0"
     rows = repository.client.query(
@@ -163,32 +174,35 @@ def _rescore_anomalies(repository: ClickHouseRepository, days: int, limit: int, 
         )
 
         issuer_key_value = issuer_key(metadata.issuer_dn, metadata.issuer_spki_hash)
-        baseline = baseline_cache.get(issuer_key_value)
-        if baseline is None:
-            try:
-                baseline = repository.fetch_issuer_baseline(issuer_key_value, days)
-            except Exception:
-                logging.getLogger(__name__).warning(
-                    "Baseline fetch failed for issuer_key=%s during rescore; continuing without baseline signals",
-                    issuer_key_value,
-                    exc_info=True,
-                )
-                baseline = None
-            baseline_cache[issuer_key_value] = baseline
+        baseline = None
+        if not fast:
+            baseline = baseline_cache.get(issuer_key_value)
+            if baseline is None:
+                try:
+                    baseline = repository.fetch_issuer_baseline(issuer_key_value, days)
+                except Exception:
+                    logging.getLogger(__name__).warning(
+                        "Baseline fetch failed for issuer_key=%s during rescore; continuing without baseline signals",
+                        issuer_key_value,
+                    )
+                    baseline = None
+                baseline_cache[issuer_key_value] = baseline
 
         registered_domains = sorted({get_registered_domain(name) for name in metadata.dns_names if name})
-        try:
-            domain_burst_counts = repository.fetch_registered_domain_burst_counts(
-                registered_domains,
-                repository.settings.anomaly_thresholds.domain_burst_window_hours,
-            )
-        except Exception:
-            logging.getLogger(__name__).warning(
-                "Domain burst lookup failed during rescore for cert_hash=%s; continuing without domain-burst signal",
-                metadata.cert_hash,
-                exc_info=True,
-            )
+        if fast:
             domain_burst_counts = {}
+        else:
+            try:
+                domain_burst_counts = repository.fetch_registered_domain_burst_counts(
+                    registered_domains,
+                    repository.settings.anomaly_thresholds.domain_burst_window_hours,
+                )
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Domain burst lookup failed during rescore for cert_hash=%s; continuing without domain-burst signal",
+                    metadata.cert_hash,
+                )
+                domain_burst_counts = {}
         _, _, anomaly_finding = analyze_certificate(
             metadata,
             repository.settings,
@@ -229,7 +243,7 @@ def main() -> None:
         return
 
     if args.command == "rescore-anomalies":
-        _rescore_anomalies(repository, args.days, args.limit, args.all_certs)
+        _rescore_anomalies(repository, args.days, args.limit, args.all_certs, args.fast)
         return
 
     if args.command == "api":
