@@ -75,10 +75,8 @@ def _rescore_anomalies(
     fast: bool,
 ) -> None:
     cutoff = datetime.now(tz=UTC) - timedelta(days=days)
-    score_filter = "" if all_certs else "AND anomaly_score > 0"
-    rows = repository.client.query(
-        f"""
-        SELECT
+    def _load_certificate_rows(candidate_hashes: list[str] | None = None) -> list[tuple]:
+        select_columns = """
             cert_hash,
             subject_cn,
             subject_dn,
@@ -105,13 +103,49 @@ def _rescore_anomalies(
             has_email_san,
             first_seen,
             last_seen
-        FROM {repository._qualified("certificates")}
-        WHERE last_seen >= %(cutoff)s
-          {score_filter}
-        LIMIT %(limit)s
-        """,
-        parameters={"cutoff": cutoff, "limit": limit},
-    ).result_rows
+        """
+        if candidate_hashes is None:
+            return repository.client.query(
+                f"""
+                SELECT {select_columns}
+                FROM {repository._qualified("certificates")}
+                WHERE last_seen >= %(cutoff)s
+                LIMIT %(limit)s
+                """,
+                parameters={"cutoff": cutoff, "limit": limit},
+            ).result_rows
+
+        rows: list[tuple] = []
+        chunk_size = 500
+        for index in range(0, len(candidate_hashes), chunk_size):
+            chunk = candidate_hashes[index : index + chunk_size]
+            rows.extend(
+                repository.client.query(
+                    f"""
+                    SELECT {select_columns}
+                    FROM {repository._qualified("certificates")}
+                    WHERE cert_hash IN ({repository._quoted_string_list(chunk)})
+                    """,
+                ).result_rows
+            )
+        return rows
+
+    if all_certs:
+        rows = _load_certificate_rows()
+    else:
+        candidate_rows = repository.client.query(
+            f"""
+            SELECT cert_hash
+            FROM {repository._qualified("cert_findings")}
+            WHERE finding_code = 'ANOMALY_SCORE'
+              AND created_at >= %(cutoff)s
+            ORDER BY created_at DESC
+            LIMIT %(limit)s
+            """,
+            parameters={"cutoff": cutoff, "limit": limit},
+        ).result_rows
+        candidate_hashes = [str(row[0]) for row in candidate_rows]
+        rows = _load_certificate_rows(candidate_hashes) if candidate_hashes else []
 
     if not rows:
         print("No certificates matched rescore window.")
