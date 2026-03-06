@@ -145,7 +145,7 @@ class ClickHouseRepository:
 
     def refresh_rollups(self, days: int) -> None:
         updated_at = datetime.now(tz=UTC)
-        effective_days = max(days, max(self.DASHBOARD_WINDOWS))
+        effective_days = max(days, 1)
         daily_query = f"""
             INSERT INTO {self._qualified("issuer_daily_stats")}
             SELECT
@@ -183,8 +183,16 @@ class ClickHouseRepository:
         """
         parameters = {"cutoff": datetime.now(tz=UTC) - timedelta(days=effective_days), "updated_at": updated_at}
         self.client.command(daily_query, parameters=parameters)
-        self.client.command(sigalg_query, parameters=parameters)
-        self.refresh_dashboard_snapshots(sorted(set(self.DASHBOARD_WINDOWS + (days,))))
+        try:
+            self.client.command(sigalg_query, parameters=parameters)
+        except Exception as exc:
+            if "MEMORY_LIMIT_EXCEEDED" not in str(exc):
+                raise
+            LOGGER.warning("Skipping sigalg rollup for %s-day window due to memory pressure.", days)
+
+        target_windows = [window for window in self.DASHBOARD_WINDOWS if window <= days]
+        target_windows.append(days)
+        self.refresh_dashboard_snapshots(sorted(set(target_windows)))
 
     def _build_dashboard_snapshot(self, days: int) -> dict[str, Any]:
         stats = self.query_issuer_stats(days)
