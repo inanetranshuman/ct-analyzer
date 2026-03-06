@@ -199,9 +199,6 @@ class ClickHouseRepository:
         profile = self.query_issuer_profile(days)
         findings = self.query_issuer_breakdown("finding_code", days, 5)
         anomalies = self.query_anomalies(min(days, 14), 12)
-        breakdowns: dict[str, dict[str, Any]] = {}
-        for group_by in self.DASHBOARD_GROUP_BYS:
-            breakdowns[group_by] = self.query_issuer_breakdown(group_by, days, 12)
         return {
             "issuer": "godaddy",
             "days": days,
@@ -215,7 +212,6 @@ class ClickHouseRepository:
                 "limit": 12,
                 "top_anomalies": anomalies,
             },
-            "breakdowns": breakdowns,
         }
 
     def refresh_dashboard_snapshots(self, windows: list[int] | None = None) -> None:
@@ -253,9 +249,23 @@ class ClickHouseRepository:
         if not row:
             raise ValueError(f"No dashboard snapshot available for {days}-day window. Run rollup first.")
         payload = json.loads(row[0])
-        requested_breakdown = payload.get("breakdowns", {}).get(group_by)
-        if requested_breakdown is None:
-            raise ValueError(f"Dashboard snapshot missing breakdown for group_by={group_by}.")
+        try:
+            requested_breakdown = self.query_issuer_breakdown(group_by, days, 12)
+        except Exception as exc:
+            if "MEMORY_LIMIT_EXCEEDED" not in str(exc):
+                raise
+            LOGGER.warning(
+                "Dashboard breakdown query exceeded memory for group_by=%s days=%s; returning empty buckets.",
+                group_by,
+                days,
+            )
+            requested_breakdown = {
+                "issuer": "godaddy",
+                "days": days,
+                "group_by": group_by,
+                "label": group_by,
+                "buckets": [],
+            }
         payload["selected_breakdown"] = requested_breakdown
         return payload
 
