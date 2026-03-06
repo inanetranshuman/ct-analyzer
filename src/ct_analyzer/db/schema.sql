@@ -104,3 +104,12 @@ CREATE TABLE IF NOT EXISTS ct_analyzer.issuer_sigalg_stats
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (issuer_key, day, sig_alg);
+
+CREATE TABLE IF NOT EXISTS ct_analyzer.dashboard_snapshots
+(
+    days UInt16,
+    payload_json String,
+    updated_at DateTime
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (days);

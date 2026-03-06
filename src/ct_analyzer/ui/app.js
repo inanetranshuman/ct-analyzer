@@ -270,20 +270,6 @@ function renderFindingList(items) {
   );
 }
 
-function isoDate(value) {
-  return value.toISOString().slice(0, 10);
-}
-
-function reportDateRange(days) {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - (days - 1));
-  return {
-    dateFrom: isoDate(start),
-    dateTo: isoDate(end),
-  };
-}
-
 function renderBreakdown(payload) {
   const rows = payload.buckets
     .map(
@@ -469,110 +455,26 @@ async function refreshDashboard() {
   setLoadingState(true);
   setAuthStatus("Loading data...", "neutral");
   try {
-    const coreResults = await Promise.allSettled([
-      fetchJson(`/stats/issuer/godaddy?days=${state.days}`, { timeoutMs: CORE_REQUEST_TIMEOUT_MS }),
-      fetchJson(`/profile/issuer/godaddy?days=${state.days}`, { timeoutMs: CORE_REQUEST_TIMEOUT_MS }),
-      fetchJson(`/breakdown/issuer/godaddy?group_by=${encodeURIComponent(state.groupBy)}&days=${state.days}&limit=12`, {
-        timeoutMs: CORE_REQUEST_TIMEOUT_MS,
-      }),
-    ]);
-    const [statsResult, profileResult, breakdownResult] = coreResults;
-
-    const firstError = coreResults.find(
-      (result) => result.status === "rejected" && String(result.reason?.message).includes("401"),
+    const payload = await fetchJson(
+      `/dashboard/issuer/godaddy?days=${state.days}&group_by=${encodeURIComponent(state.groupBy)}`,
+      { timeoutMs: CORE_REQUEST_TIMEOUT_MS },
     );
-    if (firstError) {
-      setAuthStatus("Your session is not valid. Redirecting to sign-in.", "error");
-      window.setTimeout(() => {
-        window.location.href = "/login";
-      }, 500);
-      return;
-    }
-
-    let loadedSections = 0;
-    let failedSections = 0;
-    const failedLabels = [];
-
-    if (statsResult.status === "fulfilled") {
-      renderMetricCards(statsResult.value.aggregated_counts);
-      loadedSections += 1;
-    } else {
-      renderPanelError(els.metricCards, "Could not load issuance snapshot.");
-      failedSections += 1;
-      failedLabels.push("issuance snapshot");
-    }
-
-    if (profileResult.status === "fulfilled") {
-      const profile = profileResult.value;
-      renderMiniStats(els.validityStats, profile.validity_days);
-      renderMiniStats(els.sanStats, profile.san_count);
-      renderIssuanceTemplates(profile, statsResult.status === "fulfilled" ? statsResult.value.aggregated_counts : null);
-      renderRankList(els.sigAlgList, profile.top_signature_algorithms);
-      renderRankList(els.keyTypeList, profile.top_key_types);
-      renderRankList(els.ekuList, profile.top_eku_sets);
-      loadedSections += 1;
-    } else {
-      renderPanelError(els.validityStats, "Could not load issuer validity profile.");
-      renderPanelError(els.sanStats, "Could not load SAN profile.");
-      renderPanelError(els.issuanceTemplates, "Could not load issuance template patterns.");
-      renderPanelError(els.sigAlgList, "Could not load signature algorithm patterns.");
-      renderPanelError(els.keyTypeList, "Could not load key type patterns.");
-      renderPanelError(els.findingList, "Could not load common findings.");
-      renderPanelError(els.ekuList, "Could not load EKU patterns.");
-      failedSections += 1;
-      failedLabels.push("issuer profile");
-    }
-
-    if (breakdownResult.status === "fulfilled") {
-      renderBreakdown(breakdownResult.value);
-      loadedSections += 1;
-    } else {
-      renderPanelError(els.breakdownTable, `Could not load ${state.groupBy} breakdown.`);
-      failedSections += 1;
-      failedLabels.push(`${state.groupBy} breakdown`);
-    }
-
-    if (failedSections === 0 && profileResult.status === "fulfilled") {
-      setAuthStatus(
-        `Loaded ${numberFormat(profileResult.value.cert_count)} certificates for the selected window.`,
-        "success",
-      );
-    } else if (loadedSections > 0) {
-      setAuthStatus(
-        `Loaded ${loadedSections} sections. Failed: ${failedLabels.join(", ") || `${failedSections} section${failedSections === 1 ? "" : "s"}`}.`,
-        "error",
-      );
-    } else {
-      throw new Error("All dashboard queries failed.");
-    }
-
-    void fetchJson(`/breakdown/issuer/godaddy?group_by=finding_code&days=${state.days}&limit=5`)
-      .then((payload) => {
-        renderFindingList(payload.buckets);
-      })
-      .catch(async () => {
-        const range = reportDateRange(state.days);
-        try {
-          const summary = await fetchJson(
-            `/reports/issuer/godaddy/findings-summary?date_from=${range.dateFrom}&date_to=${range.dateTo}&limit=5`,
-          );
-          const buckets = (summary.top_findings || []).map((item) => ({
-            value: item.finding_code,
-            count: item.cert_count,
-          }));
-          renderFindingList(buckets);
-        } catch {
-          renderPanelError(els.findingList, "Could not load common findings.");
-        }
-      });
-
-    void fetchJson(`/anomalies/issuer/godaddy?days=${Math.min(state.days, 14)}&limit=12`)
-      .then((payload) => {
-        renderAnomalies(payload);
-      })
-      .catch(() => {
-        renderPanelError(els.anomalyList, "Could not load suspicious certificates for this window.");
-      });
+    const aggregatedCounts = payload.aggregated_counts || {};
+    const profile = payload.profile || {};
+    renderMetricCards(aggregatedCounts);
+    renderMiniStats(els.validityStats, profile.validity_days || {});
+    renderMiniStats(els.sanStats, profile.san_count || {});
+    renderIssuanceTemplates(profile, aggregatedCounts);
+    renderRankList(els.sigAlgList, profile.top_signature_algorithms || []);
+    renderRankList(els.keyTypeList, profile.top_key_types || []);
+    renderRankList(els.ekuList, profile.top_eku_sets || []);
+    renderFindingList(payload.findings?.buckets || []);
+    renderBreakdown(payload.selected_breakdown || { label: state.groupBy, buckets: [] });
+    renderAnomalies(payload.anomalies || { top_anomalies: [] });
+    setAuthStatus(
+      `Loaded ${numberFormat(profile.cert_count || 0)} certificates from rollup snapshot (${payload.updated_at || "unknown update time"}).`,
+      "success",
+    );
   } catch (error) {
     console.error(error);
     if (String(error.message).includes("401")) {
@@ -582,7 +484,17 @@ async function refreshDashboard() {
       }, 500);
       return;
     }
-    setAuthStatus(error.message, "error");
+    renderPanelError(els.metricCards, "Could not load issuance snapshot.");
+    renderPanelError(els.validityStats, "Could not load issuer validity profile.");
+    renderPanelError(els.sanStats, "Could not load SAN profile.");
+    renderPanelError(els.issuanceTemplates, "Could not load issuance template patterns.");
+    renderPanelError(els.sigAlgList, "Could not load signature algorithm patterns.");
+    renderPanelError(els.keyTypeList, "Could not load key type patterns.");
+    renderPanelError(els.findingList, "Could not load common findings.");
+    renderPanelError(els.ekuList, "Could not load EKU patterns.");
+    renderPanelError(els.breakdownTable, `Could not load ${state.groupBy} breakdown.`);
+    renderPanelError(els.anomalyList, "Could not load suspicious certificates for this window.");
+    setAuthStatus(`Rollup snapshot unavailable: ${error.message}`, "error");
   } finally {
     setLoadingState(false);
   }

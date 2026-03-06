@@ -20,6 +20,22 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ClickHouseRepository:
+    DASHBOARD_WINDOWS = (7, 30, 90, 365)
+    DASHBOARD_GROUP_BYS = (
+        "issuer_cn",
+        "validation_type",
+        "sig_alg",
+        "key_type",
+        "key_size",
+        "eku_set",
+        "finding_code",
+        "severity",
+        "anomaly_bucket",
+        "registered_domain",
+        "validity_bucket",
+        "san_count_bucket",
+    )
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.database = settings.clickhouse.database
@@ -129,6 +145,7 @@ class ClickHouseRepository:
 
     def refresh_rollups(self, days: int) -> None:
         updated_at = datetime.now(tz=UTC)
+        effective_days = max(days, max(self.DASHBOARD_WINDOWS))
         daily_query = f"""
             INSERT INTO {self._qualified("issuer_daily_stats")}
             SELECT
@@ -164,9 +181,75 @@ class ClickHouseRepository:
             WHERE o.seen_at >= %(cutoff)s
             GROUP BY day, issuer_key, sig_alg
         """
-        parameters = {"cutoff": datetime.now(tz=UTC) - timedelta(days=days), "updated_at": updated_at}
+        parameters = {"cutoff": datetime.now(tz=UTC) - timedelta(days=effective_days), "updated_at": updated_at}
         self.client.command(daily_query, parameters=parameters)
         self.client.command(sigalg_query, parameters=parameters)
+        self.refresh_dashboard_snapshots(sorted(set(self.DASHBOARD_WINDOWS + (days,))))
+
+    def _build_dashboard_snapshot(self, days: int) -> dict[str, Any]:
+        stats = self.query_issuer_stats(days)
+        profile = self.query_issuer_profile(days)
+        findings = self.query_issuer_breakdown("finding_code", days, 5)
+        anomalies = self.query_anomalies(min(days, 14), 12)
+        breakdowns: dict[str, dict[str, Any]] = {}
+        for group_by in self.DASHBOARD_GROUP_BYS:
+            breakdowns[group_by] = self.query_issuer_breakdown(group_by, days, 12)
+        return {
+            "issuer": "godaddy",
+            "days": days,
+            "updated_at": datetime.now(tz=UTC).isoformat(),
+            "aggregated_counts": {key: value for key, value in stats.items() if key != "days"},
+            "profile": profile,
+            "findings": findings,
+            "anomalies": {
+                "issuer": "godaddy",
+                "days": min(days, 14),
+                "limit": 12,
+                "top_anomalies": anomalies,
+            },
+            "breakdowns": breakdowns,
+        }
+
+    def refresh_dashboard_snapshots(self, windows: list[int] | None = None) -> None:
+        target_windows = windows or list(self.DASHBOARD_WINDOWS)
+        updated_at = datetime.now(tz=UTC)
+        for window_days in sorted({int(window) for window in target_windows if int(window) > 0}):
+            try:
+                payload = self._build_dashboard_snapshot(window_days)
+                self.insert_rows(
+                    "dashboard_snapshots",
+                    [
+                        {
+                            "days": window_days,
+                            "payload_json": json.dumps(payload),
+                            "updated_at": updated_at,
+                        }
+                    ],
+                )
+            except Exception:
+                LOGGER.exception("Failed to refresh dashboard snapshot for %s-day window", window_days)
+
+    def query_dashboard_snapshot(self, days: int, group_by: str) -> dict[str, Any]:
+        if group_by not in self.DASHBOARD_GROUP_BYS:
+            raise ValueError(f"Unsupported group_by value: {group_by}")
+        row = self.client.query(
+            f"""
+            SELECT payload_json
+            FROM {self._qualified("dashboard_snapshots")} FINAL
+            WHERE days = %(days)s
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            parameters={"days": days},
+        ).first_row
+        if not row:
+            raise ValueError(f"No dashboard snapshot available for {days}-day window. Run rollup first.")
+        payload = json.loads(row[0])
+        requested_breakdown = payload.get("breakdowns", {}).get(group_by)
+        if requested_breakdown is None:
+            raise ValueError(f"Dashboard snapshot missing breakdown for group_by={group_by}.")
+        payload["selected_breakdown"] = requested_breakdown
+        return payload
 
     def fetch_issuer_baseline(self, issuer_key: str, days: int) -> IssuerBaseline:
         cutoff = datetime.now(tz=UTC) - timedelta(days=days)

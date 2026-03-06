@@ -5,7 +5,7 @@ from datetime import date
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from ct_analyzer.config import Settings
@@ -120,6 +120,17 @@ class DomainActivityResponse(BaseModel):
     activity: list[dict[str, Any]]
 
 
+class DashboardSnapshotResponse(BaseModel):
+    issuer: str
+    days: int
+    updated_at: str
+    aggregated_counts: dict[str, int]
+    profile: dict[str, Any]
+    findings: dict[str, Any]
+    anomalies: dict[str, Any]
+    selected_breakdown: dict[str, Any]
+
+
 def build_router(
     get_repository: Callable[[], ClickHouseRepository],
     settings: Settings,
@@ -132,6 +143,22 @@ def build_router(
     @router.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         return HealthResponse(status="ok")
+
+    @router.get("/dashboard/issuer/godaddy", response_model=DashboardSnapshotResponse)
+    async def issuer_dashboard(
+        days: int = Query(default=30, ge=1, le=365),
+        group_by: str = Query(
+            default="issuer_cn",
+            pattern="^(issuer_cn|validation_type|sig_alg|key_type|key_size|eku_set|finding_code|severity|anomaly_bucket|registered_domain|validity_bucket|san_count_bucket)$",
+        ),
+        _auth: None = Depends(auth_dependency),
+        repository: ClickHouseRepository = Depends(get_repository),
+    ) -> DashboardSnapshotResponse:
+        try:
+            payload = await asyncio.to_thread(repository.query_dashboard_snapshot, days, group_by)
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return DashboardSnapshotResponse(**payload)
 
     @router.get("/stats/issuer/godaddy", response_model=IssuerStatsResponse)
     async def issuer_stats(
