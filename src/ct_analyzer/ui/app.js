@@ -96,6 +96,14 @@ function percentFormat(value) {
   return `${((value ?? 0) * 100).toFixed(2)}%`;
 }
 
+function fixedNumber(value, digits = 2, fallback = "0.00") {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+  return numericValue.toFixed(digits);
+}
+
 function clearNode(node) {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
@@ -136,7 +144,7 @@ function renderMiniStats(node, stats) {
   for (const [label, value] of Object.entries(stats)) {
     const row = document.createElement("div");
     row.className = "mini-stat-row";
-    row.innerHTML = `<span>${label.toUpperCase()}</span><strong>${value.toFixed(2)}</strong>`;
+    row.innerHTML = `<span>${label.toUpperCase()}</span><strong>${fixedNumber(value)}</strong>`;
     node.appendChild(row);
   }
 }
@@ -201,16 +209,16 @@ function renderIssuanceTemplates(profile, aggregatedCounts) {
       attribute: "Validity Pattern",
       value:
         profile.validity_days?.p50 === profile.validity_days?.p95
-          ? `${profile.validity_days.p50.toFixed(0)} days`
-          : `p50 ${profile.validity_days?.p50?.toFixed(0) || "0"} days · p95 ${profile.validity_days?.p95?.toFixed(0) || "0"} days`,
+          ? `${fixedNumber(profile.validity_days?.p50, 0, "0")} days`
+          : `p50 ${fixedNumber(profile.validity_days?.p50, 0, "0")} days · p95 ${fixedNumber(profile.validity_days?.p95, 0, "0")} days`,
       support: "Recent baseline window",
     },
     {
       attribute: "SAN Pattern",
       value:
         profile.san_count?.p50 === profile.san_count?.p95
-          ? `${profile.san_count.p50.toFixed(0)} SAN`
-          : `p50 ${profile.san_count?.p50?.toFixed(0) || "0"} · p95 ${profile.san_count?.p95?.toFixed(0) || "0"}`,
+          ? `${fixedNumber(profile.san_count?.p50, 0, "0")} SAN`
+          : `p50 ${fixedNumber(profile.san_count?.p50, 0, "0")} · p95 ${fixedNumber(profile.san_count?.p95, 0, "0")}`,
       support: "Recent baseline window",
     },
   ];
