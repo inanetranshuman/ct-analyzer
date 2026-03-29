@@ -1,5 +1,5 @@
 const state = {
-  days: 30,
+  days: 7,
   groupBy: "issuer_cn",
   sessionAuthenticated: false,
   loading: false,
